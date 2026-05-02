@@ -1,0 +1,8 @@
+{
+  "name": "@aster/cli",
+  "version": "0.1.0",
+  "type": "module",
+  "bin": {
+    "aster": "./bin/aster.js"
+  }
+}

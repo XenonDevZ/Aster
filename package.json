@@ -1,0 +1,20 @@
+{
+  "name": "aster-framework-lab",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "A compiler-driven, server-first web framework prototype with SSR, file routing, middleware, and islands.",
+  "scripts": {
+    "test": "node --test tests/*.test.js",
+    "dev:example": "node packages/aster-cli/bin/aster.js dev examples/blog --port 3000",
+    "build:example": "node packages/aster-cli/bin/aster.js build examples/blog",
+    "preview:example": "node packages/aster-cli/bin/aster.js preview examples/blog --port 4173",
+    "routes:example": "node packages/aster-cli/bin/aster.js routes examples/blog"
+  },
+  "workspaces": [
+    "packages/*"
+  ],
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

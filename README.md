@@ -21,7 +21,7 @@ Send HTML first. Stream when useful. Hydrate only what needs browser state.
 - Server actions for HTML forms through generated `/_aster/action/...` endpoints.
 - Production action hardening: CSRF checks, body-size limits, and safe redirects.
 - Development server with public asset serving and live reload.
-- Production build output with hashed assets and a copied server runtime.
+- Production build output with a server/client module graph, hashed assets, and a copied server runtime.
 - Node preview and production start commands.
 
 ## Workspace
@@ -29,7 +29,7 @@ Send HTML first. Stream when useful. Hydrate only what needs browser state.
 ```text
 packages/
   aster-core/      Request pipeline, HTML helpers, router, pages, islands, actions.
-  aster-compiler/  File-route discovery, JSX lowering, hashed assets, server output.
+  aster-compiler/  File-route discovery, JSX lowering, module graphing, hashed assets, server output.
   aster-dev/       Dependency-free development server and live reload.
   aster-node/      Node adapter for preview and production serving.
   aster-cli/       CLI commands for dev, routes, build, preview, and start.
@@ -73,7 +73,7 @@ Command summary:
 ```text
 dev      Starts the live development server.
 routes   Prints the discovered route manifest.
-build    Emits route metadata, hashed assets, and server deploy output.
+build    Emits route metadata, module graph data, hashed assets, and server deploy output.
 preview  Starts the Node adapter, using build output when present.
 start    Starts the Node adapter in production mode and requires build output.
 ```
@@ -180,6 +180,8 @@ export default function hydrate(host, props) {
 ```
 
 In development, island modules are served from `/_aster/app/...`. After `aster build`, production HTML is rewritten to hashed URLs under `/_aster/assets/...`.
+
+The production asset pass traces island module imports and rewrites relative imports between island files to their hashed asset URLs, so browser modules can depend on small local helpers without exposing raw `app/components` paths.
 
 ## Server Actions
 
@@ -324,8 +326,10 @@ The build writes:
 
 ```text
 examples/blog/.aster/manifest.json
+examples/blog/.aster/graph.json
 examples/blog/.aster/assets.json
 examples/blog/.aster/server.json
+examples/blog/.aster/output/module-graph.json
 examples/blog/.aster/output/assets/
 examples/blog/.aster/output/server/
 ```
@@ -333,9 +337,11 @@ examples/blog/.aster/output/server/
 Build output includes:
 
 - A serializable route manifest.
-- Hashed public assets and browser island modules.
+- A server/client module graph with entries, traced modules, externals, and diagnostics.
+- Hashed public assets and traced browser island modules.
+- Rewritten island imports that point at hashed production asset URLs.
 - CSS minification for production asset output.
-- A server output folder with copied route/layout/boundary modules.
+- A server output folder containing traced server modules instead of the entire source tree.
 - Compiled `.jsx` server files.
 - A copied Aster core runtime used by the built server output.
 
@@ -386,13 +392,15 @@ Current limitations:
 - No TypeScript compiler integration yet.
 - No third-party dependency bundling for server output.
 - JavaScript asset minification is not implemented.
+- Client graph diagnostics are warnings, not hard build failures.
 - The CSP still allows inline scripts because the runtime is injected inline.
 - Only the Node adapter exists today.
 
 Near-term roadmap:
 
 - TypeScript route compilation.
-- Server/client module graph splitting.
+- Hard server/client boundary enforcement.
+- NPM dependency bundling for standalone deploy output.
 - Stronger CSP through nonces or externalized runtime scripts.
 - Deployment adapters for workers and edge runtimes.
 - Production diagnostics, tracing, and structured logs.

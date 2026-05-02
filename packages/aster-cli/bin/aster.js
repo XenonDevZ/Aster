@@ -4,6 +4,7 @@ import path from "node:path";
 import {
   buildProductionAssets,
   buildServerOutput,
+  createModuleGraph,
   createRouteManifest,
   printRouteManifest
 } from "../../aster-compiler/src/index.js";
@@ -107,8 +108,9 @@ async function routes(args) {
 async function build(args) {
   const root = path.resolve(positional(args));
   const manifest = await createRouteManifest({ root });
-  const assetManifest = await buildProductionAssets({ root });
-  const serverManifest = await buildServerOutput({ root });
+  const graph = await createModuleGraph({ root });
+  const assetManifest = await buildProductionAssets({ root, graph });
+  const serverManifest = await buildServerOutput({ root, graph });
   const outDirectory = path.join(root, ".aster");
   const serializable = {
     root: manifest.root,
@@ -142,6 +144,7 @@ async function build(args) {
   await writeFile(path.join(outDirectory, "manifest.json"), `${JSON.stringify(serializable, null, 2)}\n`);
   console.log(`Wrote ${path.relative(process.cwd(), path.join(outDirectory, "manifest.json"))}`);
   console.log(`Wrote ${path.relative(process.cwd(), path.join(outDirectory, "assets.json"))}`);
+  console.log(`Wrote ${path.relative(process.cwd(), path.join(outDirectory, "graph.json"))}`);
   console.log(`Built ${Object.keys(assetManifest.assets).length} hashed assets in ${assetManifest.outputDirectory}`);
   console.log(`Built ${serverManifest.files.length} server files in ${serverManifest.outputDirectory}/server`);
 }

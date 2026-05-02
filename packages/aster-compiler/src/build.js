@@ -2,11 +2,13 @@ import { createHash } from "node:crypto";
 import { mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { createModuleGraph, resolveModuleSpecifier } from "./graph.js";
 import { transformJsx } from "./jsx-transform.js";
 
 const DEFAULT_OUTPUT_DIRECTORY = ".aster/output";
 const DEFAULT_ASSETS_BASE = "/_aster/assets/";
 const APP_ASSET_EXTENSIONS = new Set([".css", ".js", ".json", ".mjs", ".png", ".svg", ".txt", ".webp"]);
+const REWRITABLE_CLIENT_EXTENSIONS = new Set([".js", ".mjs"]);
 const SERVER_FILE_EXTENSIONS = new Set([".js", ".mjs", ".jsx", ".json"]);
 const COMPILER_DIRECTORY = path.dirname(fileURLToPath(import.meta.url));
 const CORE_SOURCE_DIRECTORY = path.resolve(COMPILER_DIRECTORY, "../../aster-core/src");
@@ -76,6 +78,14 @@ function hashedFileName(relativePath, hash) {
   return directory === "." ? fileName : slashPath(path.join(directory, fileName));
 }
 
+function assetOutputFile(asset, hash) {
+  return slashPath(path.join("assets", asset.type, hashedFileName(asset.relativePath, hash)));
+}
+
+function assetOutputUrl(asset, hash, assetsBase) {
+  return `${assetsBase}${slashPath(path.join(asset.type, hashedFileName(asset.relativePath, hash)))}`;
+}
+
 function minifyCss(buffer) {
   return Buffer.from(
     buffer
@@ -112,12 +122,23 @@ async function collectPublicAssets(root) {
   });
 }
 
-async function collectAppAssets(root) {
+async function collectAppAssets(root, graph) {
   const appDirectory = path.join(root, "app");
   const componentsDirectory = path.join(appDirectory, "components");
-  const files = (await walkFiles(componentsDirectory)).filter((filePath) =>
-    APP_ASSET_EXTENSIONS.has(path.extname(filePath))
-  );
+  const graphFiles = new Set(graph?.client?.modules?.map((module) => module.filePath) ?? []);
+  const files = [...graphFiles];
+
+  for (const filePath of await walkFiles(componentsDirectory)) {
+    const extension = path.extname(filePath);
+
+    if (!APP_ASSET_EXTENSIONS.has(extension)) {
+      continue;
+    }
+
+    if (!graphFiles.has(filePath) && !REWRITABLE_CLIENT_EXTENSIONS.has(extension)) {
+      files.push(filePath);
+    }
+  }
 
   return files.map((filePath) => {
     const relativePath = slashPath(path.relative(appDirectory, filePath));
@@ -132,12 +153,83 @@ async function collectAppAssets(root) {
   });
 }
 
+async function rewriteClientModuleImports(code, asset, recordsByFilePath, hashByUrl, assetsBase) {
+  const importPattern = /(from\s*["']|import\s*\(\s*["']|import\s*["'])([^"']+)(["'])/g;
+  let output = "";
+  let cursor = 0;
+
+  for (const match of code.matchAll(importPattern)) {
+    const [full, prefix, specifier, suffix] = match;
+    const start = match.index;
+    const end = start + full.length;
+    const resolved = await resolveModuleSpecifier(specifier, asset.filePath);
+    const record = resolved ? recordsByFilePath.get(resolved) : null;
+
+    output += code.slice(cursor, start);
+
+    if (record?.type === "app") {
+      output += `${prefix}${assetOutputUrl(record, hashByUrl.get(record.originalUrl), assetsBase)}${suffix}`;
+    } else {
+      output += full;
+    }
+
+    cursor = end;
+  }
+
+  return `${output}${code.slice(cursor)}`;
+}
+
+async function finalizeAssetRecords(records, assetsBase, options) {
+  const recordsByFilePath = new Map(records.map((record) => [record.filePath, record]));
+  let hashByUrl = new Map(records.map((record) => [record.originalUrl, assetHash(record.sourceBytes)]));
+
+  for (let iteration = 0; iteration < 8; iteration += 1) {
+    const nextHashes = new Map();
+    let changed = false;
+
+    for (const record of records) {
+      let bytes = prepareAssetBytes(record.filePath, record.sourceBytes, options);
+
+      if (record.type === "app" && REWRITABLE_CLIENT_EXTENSIONS.has(path.extname(record.filePath))) {
+        const code = await rewriteClientModuleImports(bytes.toString("utf8"), record, recordsByFilePath, hashByUrl, assetsBase);
+        bytes = Buffer.from(code);
+      }
+
+      record.bytes = bytes;
+      const hash = assetHash(bytes);
+      nextHashes.set(record.originalUrl, hash);
+
+      if (hash !== hashByUrl.get(record.originalUrl)) {
+        changed = true;
+      }
+    }
+
+    hashByUrl = nextHashes;
+
+    if (!changed) {
+      break;
+    }
+  }
+
+  return hashByUrl;
+}
+
+async function writeModuleGraphManifest(root, outputDirectory, graph) {
+  const absoluteOutputDirectory = path.resolve(root, outputDirectory);
+
+  await mkdir(path.join(root, ".aster"), { recursive: true });
+  await mkdir(absoluteOutputDirectory, { recursive: true });
+  await writeFile(path.join(root, ".aster/graph.json"), `${JSON.stringify(graph, null, 2)}\n`);
+  await writeFile(path.join(absoluteOutputDirectory, "module-graph.json"), `${JSON.stringify(graph, null, 2)}\n`);
+}
+
 export async function buildProductionAssets(options = {}) {
   const root = path.resolve(options.root ?? process.cwd());
   const outputDirectory = options.outputDirectory ?? DEFAULT_OUTPUT_DIRECTORY;
   const assetsBase = options.assetsBase ?? DEFAULT_ASSETS_BASE;
   const absoluteOutputDirectory = path.resolve(root, outputDirectory);
   const absoluteAssetsDirectory = path.join(absoluteOutputDirectory, "assets");
+  const graph = options.graph ?? (await createModuleGraph({ root }));
   const assets = {};
 
   if (options.clean !== false) {
@@ -146,24 +238,30 @@ export async function buildProductionAssets(options = {}) {
 
   await mkdir(absoluteAssetsDirectory, { recursive: true });
 
-  for (const asset of [...(await collectPublicAssets(root)), ...(await collectAppAssets(root))]) {
-    const sourceBytes = await readFile(asset.filePath);
-    const bytes = prepareAssetBytes(asset.filePath, sourceBytes, options);
-    const hash = assetHash(bytes);
-    const file = slashPath(path.join("assets", asset.type, hashedFileName(asset.relativePath, hash)));
-    const url = `${assetsBase}${slashPath(path.join(asset.type, hashedFileName(asset.relativePath, hash)))}`;
+  const records = await Promise.all(
+    [...(await collectPublicAssets(root)), ...(await collectAppAssets(root, graph))].map(async (asset) => ({
+      ...asset,
+      sourceBytes: await readFile(asset.filePath)
+    }))
+  );
+  const hashByUrl = await finalizeAssetRecords(records, assetsBase, options);
+
+  for (const asset of records) {
+    const hash = hashByUrl.get(asset.originalUrl);
+    const file = assetOutputFile(asset, hash);
+    const url = assetOutputUrl(asset, hash, assetsBase);
 
     await mkdir(path.dirname(path.join(absoluteOutputDirectory, file)), { recursive: true });
-    await writeFile(path.join(absoluteOutputDirectory, file), bytes);
+    await writeFile(path.join(absoluteOutputDirectory, file), asset.bytes);
 
     assets[asset.originalUrl] = {
       type: asset.type,
       source: asset.source,
       file,
       url,
-      size: bytes.byteLength,
+      size: asset.bytes.byteLength,
       hash,
-      integrity: assetIntegrity(bytes)
+      integrity: assetIntegrity(asset.bytes)
     };
   }
 
@@ -172,12 +270,18 @@ export async function buildProductionAssets(options = {}) {
     generatedAt: new Date().toISOString(),
     outputDirectory: slashPath(outputDirectory),
     assetsBase,
-    assets
+    assets,
+    graph: {
+      entries: graph.client.entries,
+      modules: graph.client.modules.map((module) => module.id),
+      diagnostics: graph.client.diagnostics
+    }
   };
 
   await mkdir(path.join(root, ".aster"), { recursive: true });
   await writeFile(path.join(root, ".aster/assets.json"), `${JSON.stringify(manifest, null, 2)}\n`);
   await writeFile(path.join(absoluteOutputDirectory, "asset-manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`);
+  await writeModuleGraphManifest(root, outputDirectory, graph);
 
   return manifest;
 }
@@ -218,7 +322,7 @@ function resolvedSpecifierPath(specifier, sourceFile) {
   return null;
 }
 
-function rewriteServerSpecifier(specifier, sourceFile, outputFile, root, serverRoot) {
+async function rewriteServerSpecifier(specifier, sourceFile, outputFile, root, serverRoot) {
   if (specifier === "@aster/core") {
     return ensureRelativeSpecifier(outputFile, path.join(serverRoot, "packages/aster-core/src/index.js"));
   }
@@ -230,7 +334,7 @@ function rewriteServerSpecifier(specifier, sourceFile, outputFile, root, serverR
     );
   }
 
-  const resolved = resolvedSpecifierPath(specifier, sourceFile);
+  const resolved = (await resolveModuleSpecifier(specifier, sourceFile)) ?? resolvedSpecifierPath(specifier, sourceFile);
 
   if (!resolved) {
     return specifier;
@@ -249,12 +353,22 @@ function rewriteServerSpecifier(specifier, sourceFile, outputFile, root, serverR
   return specifier;
 }
 
-function rewriteServerImports(code, sourceFile, outputFile, root, serverRoot) {
+async function rewriteServerImports(code, sourceFile, outputFile, root, serverRoot) {
   const importPattern = /(from\s*["']|import\s*\(\s*["']|import\s*["'])([^"']+)(["'])/g;
+  let output = "";
+  let cursor = 0;
 
-  return code.replace(importPattern, (match, prefix, specifier, suffix) => {
-    return `${prefix}${rewriteServerSpecifier(specifier, sourceFile, outputFile, root, serverRoot)}${suffix}`;
-  });
+  for (const match of code.matchAll(importPattern)) {
+    const [full, prefix, specifier, suffix] = match;
+    const start = match.index;
+    const end = start + full.length;
+
+    output += code.slice(cursor, start);
+    output += `${prefix}${await rewriteServerSpecifier(specifier, sourceFile, outputFile, root, serverRoot)}${suffix}`;
+    cursor = end;
+  }
+
+  return `${output}${code.slice(cursor)}`;
 }
 
 async function copyCoreRuntime(serverRoot) {
@@ -278,12 +392,10 @@ export async function buildServerOutput(options = {}) {
   const outputDirectory = options.outputDirectory ?? DEFAULT_OUTPUT_DIRECTORY;
   const absoluteOutputDirectory = path.resolve(root, outputDirectory);
   const serverRoot = path.join(absoluteOutputDirectory, "server");
-  const appDirectory = path.join(root, "app");
-  const files = (await walkFiles(appDirectory)).filter((filePath) => {
-    const relativePath = slashPath(path.relative(appDirectory, filePath));
-
-    return !relativePath.startsWith("components/") && SERVER_FILE_EXTENSIONS.has(path.extname(filePath));
-  });
+  const graph = options.graph ?? (await createModuleGraph({ root }));
+  const files = graph.server.modules
+    .map((module) => module.filePath)
+    .filter((filePath) => SERVER_FILE_EXTENSIONS.has(path.extname(filePath)));
   const serverFiles = [];
 
   if (options.clean !== false) {
@@ -297,7 +409,7 @@ export async function buildServerOutput(options = {}) {
     const outputPath = serverAppOutputPath(root, serverRoot, filePath);
     const source = await readFile(filePath, "utf8");
     const transformed = filePath.endsWith(".jsx") ? transformJsx(source).code : source;
-    const code = rewriteServerImports(transformed, filePath, outputPath, root, serverRoot);
+    const code = await rewriteServerImports(transformed, filePath, outputPath, root, serverRoot);
 
     await mkdir(path.dirname(outputPath), { recursive: true });
     await writeFile(outputPath, `${code.trimEnd()}\n`);
@@ -315,6 +427,12 @@ export async function buildServerOutput(options = {}) {
     serverRoot: "server",
     appDirectory: "server/app",
     files: serverFiles,
+    graph: {
+      entries: graph.server.entries,
+      modules: graph.server.modules.map((module) => module.id),
+      externals: graph.server.externals,
+      diagnostics: graph.server.diagnostics
+    },
     runtime: {
       "@aster/core": "server/packages/aster-core/src/index.js",
       files: runtimeFiles
@@ -324,6 +442,7 @@ export async function buildServerOutput(options = {}) {
   await mkdir(path.join(root, ".aster"), { recursive: true });
   await writeFile(path.join(root, ".aster/server.json"), `${JSON.stringify(manifest, null, 2)}\n`);
   await writeFile(path.join(serverRoot, "server-manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`);
+  await writeModuleGraphManifest(root, outputDirectory, graph);
 
   return manifest;
 }

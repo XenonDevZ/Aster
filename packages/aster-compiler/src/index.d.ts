@@ -55,6 +55,49 @@ export type ProductionAssetManifest = {
   outputDirectory: string;
   assetsBase: string;
   assets: Record<string, ProductionAssetEntry>;
+  graph: {
+    entries: string[];
+    modules: string[];
+    diagnostics: ModuleGraphDiagnostic[];
+  };
+};
+
+export type ModuleGraphImport = {
+  specifier: string;
+  resolved?: string;
+  external?: boolean;
+};
+
+export type ModuleGraphModule = {
+  id: string;
+  filePath: string;
+  imports: ModuleGraphImport[];
+};
+
+export type ModuleGraphDiagnostic = {
+  level: "warning" | "error";
+  code: string;
+  message: string;
+  importer?: string;
+  imported?: string;
+};
+
+export type ModuleGraph = {
+  version: number;
+  generatedAt: string;
+  root: string;
+  server: {
+    entries: string[];
+    modules: ModuleGraphModule[];
+    externals: Array<{ specifier: string; importedBy: string }>;
+    diagnostics: ModuleGraphDiagnostic[];
+  };
+  client: {
+    entries: string[];
+    modules: ModuleGraphModule[];
+    externals: Array<{ specifier: string; importedBy: string }>;
+    diagnostics: ModuleGraphDiagnostic[];
+  };
 };
 
 export type ServerOutputManifest = {
@@ -64,6 +107,12 @@ export type ServerOutputManifest = {
   serverRoot: string;
   appDirectory: string;
   files: Array<{ source: string; file: string }>;
+  graph: {
+    entries: string[];
+    modules: string[];
+    externals: Array<{ specifier: string; importedBy: string }>;
+    diagnostics: ModuleGraphDiagnostic[];
+  };
   runtime: {
     "@aster/core": string;
     files: string[];
@@ -93,17 +142,26 @@ export function createRouteManifest(options: {
   routesDirectory?: string;
   cacheBust?: boolean;
 }): Promise<RouteManifest>;
+export function parseModuleSpecifiers(source: string): string[];
+export function resolveModuleSpecifier(specifier: string, importer: string): Promise<string | null>;
+export function createModuleGraph(options?: {
+  root?: string;
+  serverEntries?: string[];
+  clientEntries?: string[];
+}): Promise<ModuleGraph>;
 export function buildProductionAssets(options?: {
   root?: string;
   outputDirectory?: string;
   assetsBase?: string;
   clean?: boolean;
   minify?: boolean;
+  graph?: ModuleGraph;
 }): Promise<ProductionAssetManifest>;
 export function buildServerOutput(options?: {
   root?: string;
   outputDirectory?: string;
   clean?: boolean;
+  graph?: ModuleGraph;
 }): Promise<ServerOutputManifest>;
 export function rewriteAssetUrls(markup: string, manifest?: ProductionAssetManifest | null): string;
 export function printRouteManifest(manifest: RouteManifest): string;

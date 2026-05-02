@@ -7,6 +7,7 @@ import test from "node:test";
 import {
   buildProductionAssets,
   buildServerOutput,
+  createModuleGraph,
   createRouteManifest,
   printRouteManifest,
   routePatternFromFile
@@ -96,51 +97,121 @@ test("buildProductionAssets emits hashed public and app browser assets", async (
   await mkdir(path.join(root, "public"), { recursive: true });
   await mkdir(path.join(root, "app/components"), { recursive: true });
   await writeFile(path.join(root, "public/styles.css"), "/* dev */\n.hero { color: teal; }\n");
-  await writeFile(path.join(root, "app/components/counter.js"), "export default function hydrate() {}\n");
+  await writeFile(path.join(root, "app/components/label.js"), "export const label = 'Count';\n");
+  await writeFile(
+    path.join(root, "app/components/counter.js"),
+    "import { label } from './label.js';\nexport default function hydrate() { return label; }\n"
+  );
 
   const manifest = await buildProductionAssets({ root });
   const style = manifest.assets["/styles.css"];
   const counter = manifest.assets["/_aster/app/components/counter.js"];
+  const label = manifest.assets["/_aster/app/components/label.js"];
+  const counterOutput = await readFile(path.join(root, manifest.outputDirectory, counter.file), "utf8");
 
   assert.equal(manifest.outputDirectory, ".aster/output");
   assert.match(style.url, /^\/_aster\/assets\/public\/styles\.[a-f0-9]{10}\.css$/);
   assert.match(counter.url, /^\/_aster\/assets\/app\/components\/counter\.[a-f0-9]{10}\.js$/);
+  assert.match(label.url, /^\/_aster\/assets\/app\/components\/label\.[a-f0-9]{10}\.js$/);
   assert.equal(style.file.startsWith("assets/public/"), true);
   assert.equal(counter.file.startsWith("assets/app/components/"), true);
   assert.equal((await readFile(path.join(root, manifest.outputDirectory, style.file), "utf8")), ".hero{color:teal;}");
+  assert.match(counterOutput, new RegExp(`import \\{ label \\} from '${label.url.replaceAll("/", "\\/")}'`));
+  assert.deepEqual(manifest.graph.modules, ["app/components/counter.js", "app/components/label.js"]);
   assert.match(await readFile(path.join(root, ".aster/assets.json"), "utf8"), /"\/styles\.css"/);
+  assert.match(await readFile(path.join(root, ".aster/graph.json"), "utf8"), /"client"/);
 });
 
-test("buildServerOutput copies server app files and rewrites runtime imports", async () => {
+test("createModuleGraph traces server and client dependencies", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "aster-module-graph-"));
+  const coreUrl = pathToFileURL(path.resolve("packages/aster-core/src/index.js")).href;
+
+  await mkdir(path.join(root, "app/routes"), { recursive: true });
+  await mkdir(path.join(root, "app/lib"), { recursive: true });
+  await mkdir(path.join(root, "app/components"), { recursive: true });
+  await writeFile(path.join(root, "app/lib/message.js"), "export const message = 'from shared server module';\n");
+  await writeFile(path.join(root, "app/lib/unused.js"), "export const unused = true;\n");
+  await writeFile(path.join(root, "app/components/label.js"), "export const label = 'Count';\n");
+  await writeFile(path.join(root, "app/components/counter.js"), "import { label } from './label.js';\nexport default () => label;\n");
+  await writeFile(
+    path.join(root, "app/routes/index.page.js"),
+    `import { page } from "${coreUrl}";
+import { message } from "../lib/message";
+export function GET() {
+  return page(message);
+}
+`
+  );
+
+  const graph = await createModuleGraph({ root });
+
+  assert.deepEqual(graph.server.modules.map((module) => module.id), [
+    "app/lib/message.js",
+    "app/routes/index.page.js"
+  ]);
+  assert.deepEqual(graph.client.modules.map((module) => module.id), [
+    "app/components/counter.js",
+    "app/components/label.js"
+  ]);
+  assert.equal(graph.server.modules.some((module) => module.id === "app/lib/unused.js"), false);
+  assert.deepEqual(graph.server.modules.find((module) => module.id === "app/routes/index.page.js")?.imports, [
+    {
+      specifier: "../lib/message",
+      resolved: "app/lib/message.js"
+    },
+    {
+      specifier: coreUrl,
+      external: true
+    }
+  ]);
+});
+
+test("buildServerOutput copies traced server modules and rewrites runtime imports", async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), "aster-server-output-"));
   const coreUrl = pathToFileURL(path.resolve("packages/aster-core/src/index.js")).href;
 
   await mkdir(path.join(root, "app/routes"), { recursive: true });
+  await mkdir(path.join(root, "app/lib"), { recursive: true });
   await mkdir(path.join(root, "app/components"), { recursive: true });
+  await writeFile(path.join(root, "app/lib/message.js"), "export const message = 'Built JSX';\n");
+  await writeFile(path.join(root, "app/lib/unused.js"), "export const unused = true;\n");
   await writeFile(path.join(root, "app/components/counter.js"), "export default function hydrate() {}\n");
   await writeFile(
     path.join(root, "app/routes/jsx.page.jsx"),
     `import { page } from "${coreUrl}";
+import { message } from "../lib/message";
 export function GET() {
-  return page(<main>Built JSX</main>, { title: "Built" });
+  return page(<main>{message}</main>, { title: "Built" });
 }
 `
   );
 
   const manifest = await buildServerOutput({ root });
   const routeOutput = await readFile(path.join(root, ".aster/output/server/app/routes/jsx.page.js"), "utf8");
+  const sharedOutput = await readFile(path.join(root, ".aster/output/server/app/lib/message.js"), "utf8");
   const copiedCore = await readFile(path.join(root, ".aster/output/server/packages/aster-core/src/index.js"), "utf8");
 
   assert.equal(manifest.serverRoot, "server");
   assert.deepEqual(manifest.files, [
+    {
+      source: "app/lib/message.js",
+      file: "server/app/lib/message.js"
+    },
     {
       source: "app/routes/jsx.page.jsx",
       file: "server/app/routes/jsx.page.js"
     }
   ]);
   assert.match(routeOutput, /__asterJsx\("main"/);
+  assert.match(routeOutput, /from "\.\.\/lib\/message\.js"/);
   assert.match(routeOutput, /packages\/aster-core\/src\/index\.js/);
   assert.doesNotMatch(routeOutput, /file:\/\//);
+  assert.match(sharedOutput, /Built JSX/);
+  await assert.rejects(
+    () => readFile(path.join(root, ".aster/output/server/app/lib/unused.js"), "utf8"),
+    /ENOENT/
+  );
+  assert.deepEqual(manifest.graph.modules, ["app/lib/message.js", "app/routes/jsx.page.jsx"]);
   assert.match(copiedCore, /export \{ action/);
   assert.match(await readFile(path.join(root, ".aster/server.json"), "utf8"), /"serverRoot": "server"/);
 });

@@ -3,6 +3,7 @@ export {
   buildServerOutput,
   rewriteAssetUrls
 } from "./build.js";
+export { createModuleGraph, parseModuleSpecifiers, resolveModuleSpecifier } from "./graph.js";
 export {
   boundaryChainForRoute,
   createRouteManifest,

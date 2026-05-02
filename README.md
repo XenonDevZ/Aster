@@ -11,7 +11,7 @@ Send HTML first. Stream when useful. Hydrate only what needs browser state.
 ## Highlights
 
 - File-based routing with dynamic, catch-all, and route-group segments.
-- Nested layouts from `app/layout.js` and route segment `layout.js` files.
+- Nested layouts from `app/layout.js`, `app/layout.mjs`, `app/layout.jsx`, and matching route segment layout files.
 - Server-rendered pages with metadata/head management.
 - Route loaders, streaming SSR, deferred loader data, and loading boundaries.
 - Route error boundaries with nearest-boundary recovery.
@@ -105,7 +105,7 @@ If no explicit method export exists, Aster uses the module default export as a `
 
 ## Layouts
 
-Layouts wrap matched pages from the leaf route back to the root layout.
+Layouts wrap matched pages from the leaf route back to the root layout. Layout files can be `layout.js`, `layout.mjs`, or `layout.jsx`.
 
 ```text
 app/layout.js
@@ -250,7 +250,7 @@ export function GET({ data }) {
 }
 ```
 
-If a matching `loading.js` or `loading.jsx` exists, Aster uses it as the deferred fallback.
+If a matching `loading.js`, `loading.mjs`, or `loading.jsx` exists, Aster uses it as the deferred fallback.
 
 ## JSX
 
@@ -298,7 +298,7 @@ window.aster.navigate("/contact");
 
 ## Error Boundaries
 
-Add `error.js` or `error.jsx` beside a layout or route segment. When a route loader, handler, metadata function, or layout throws, Aster renders the nearest boundary.
+Add `error.js`, `error.mjs`, or `error.jsx` beside a layout or route segment. When a route loader, handler, metadata function, or layout throws, Aster renders the nearest boundary.
 
 ```jsx
 import { page } from "@aster/core";
@@ -389,20 +389,21 @@ Aster is still a prototype. It now has a serious framework shape, but it is not 
 
 Current limitations:
 
-- No TypeScript compiler integration yet.
-- No third-party dependency bundling for server output.
-- JavaScript asset minification is not implemented.
-- Client graph diagnostics are warnings, not hard build failures.
-- The CSP still allows inline scripts because the runtime is injected inline.
-- Only the Node adapter exists today.
+- No TypeScript route/module compilation yet. Route discovery covers `.js`, `.mjs`, and `.jsx`; module graph resolution covers `.js`, `.mjs`, `.jsx`, and `.json`.
+- External npm packages and imports outside the app root are recorded as externals, not bundled. Runtime dependencies must still be available in the deployment environment.
+- CSS assets are lightly minified, but JavaScript asset minification is not implemented.
+- Module graph boundary diagnostics are warnings, not hard build failures.
+- The default CSP still allows inline scripts/styles because Aster injects inline runtime code today.
+- Node is the only production adapter. The dev server also runs on Node, but worker/edge adapters do not exist yet.
 
 Near-term roadmap:
 
-- TypeScript route compilation.
-- Hard server/client boundary enforcement.
-- NPM dependency bundling for standalone deploy output.
+- TypeScript route and module compilation.
+- Hard server/client boundary enforcement from the module graph.
+- External dependency bundling for standalone deploy output.
+- JavaScript minification and production source maps.
 - Stronger CSP through nonces or externalized runtime scripts.
-- Deployment adapters for workers and edge runtimes.
+- Worker and edge deployment adapters.
 - Production diagnostics, tracing, and structured logs.
 
 ## License

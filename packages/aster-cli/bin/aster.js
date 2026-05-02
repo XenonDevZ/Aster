@@ -4,9 +4,11 @@ import path from "node:path";
 import {
   buildProductionAssets,
   buildServerOutput,
+  createIntentGraph,
   createModuleGraph,
   createRouteManifest,
-  printRouteManifest
+  printRouteManifest,
+  writeIntentGraph
 } from "../../aster-compiler/src/index.js";
 import { startDevServer } from "../../aster-dev/src/index.js";
 import { startNodeServer } from "../../aster-node/src/index.js";
@@ -111,6 +113,8 @@ async function build(args) {
   const graph = await createModuleGraph({ root });
   const assetManifest = await buildProductionAssets({ root, graph });
   const serverManifest = await buildServerOutput({ root, graph });
+  const intentGraph = createIntentGraph(manifest);
+  await writeIntentGraph(intentGraph, { root });
   const outDirectory = path.join(root, ".aster");
   const serializable = {
     root: manifest.root,
@@ -119,6 +123,7 @@ async function build(args) {
       id: route.id,
       pattern: route.pattern,
       methods: route.methods,
+      intent: route.intent,
       actions: route.actions.map((action) => ({
         id: action.id,
         name: action.name,
@@ -145,8 +150,10 @@ async function build(args) {
   console.log(`Wrote ${path.relative(process.cwd(), path.join(outDirectory, "manifest.json"))}`);
   console.log(`Wrote ${path.relative(process.cwd(), path.join(outDirectory, "assets.json"))}`);
   console.log(`Wrote ${path.relative(process.cwd(), path.join(outDirectory, "graph.json"))}`);
+  console.log(`Wrote ${path.relative(process.cwd(), path.join(outDirectory, "intent.json"))}`);
   console.log(`Built ${Object.keys(assetManifest.assets).length} hashed assets in ${assetManifest.outputDirectory}`);
   console.log(`Built ${serverManifest.files.length} server files in ${serverManifest.outputDirectory}/server`);
+  console.log(`Compiled ${intentGraph.routes.length} route intents`);
 }
 
 const [command, ...args] = process.argv.slice(2);

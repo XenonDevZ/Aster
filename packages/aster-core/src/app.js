@@ -26,6 +26,54 @@ function normalizeActionBodyLimit(limit) {
   return Number.isFinite(value) && value > 0 ? value : DEFAULT_ACTION_BODY_LIMIT;
 }
 
+function byteSize(value) {
+  if (value === false) {
+    return false;
+  }
+
+  if (typeof value === "number") {
+    return normalizeActionBodyLimit(value);
+  }
+
+  if (typeof value !== "string") {
+    return undefined;
+  }
+
+  const match = value.trim().toLowerCase().match(/^(\d+(?:\.\d+)?)\s*(b|kb|mb)?$/);
+
+  if (!match) {
+    return undefined;
+  }
+
+  const amount = Number(match[1]);
+  const unit = match[2] ?? "b";
+  const scale = unit === "mb" ? 1_000_000 : unit === "kb" ? 1_000 : 1;
+
+  return normalizeActionBodyLimit(amount * scale);
+}
+
+function routeIntent(route) {
+  const intent = route?.intent ?? route?.module?.intent;
+
+  return intent && typeof intent === "object" && !Array.isArray(intent) ? intent : {};
+}
+
+function routeActionBodyLimit(route, fallback) {
+  const value = byteSize(routeIntent(route).security?.maxBody);
+
+  return value === undefined ? fallback : value;
+}
+
+function actionAllowedByIntent(actionEntry) {
+  const actions = routeIntent(actionEntry.route).actions;
+
+  if (!Array.isArray(actions)) {
+    return true;
+  }
+
+  return actions.map(String).includes(actionEntry.name) || actions.map(String).includes(actionEntry.id);
+}
+
 function originAllowed(origin, url, allowedOrigins) {
   return origin === url.origin || allowedOrigins.has(origin);
 }
@@ -407,13 +455,25 @@ export function createApp(options) {
       );
     }
 
-    const limited = await readLimitedActionRequest(context.request, actionBodyLimit);
+    if (!actionAllowedByIntent(context.action)) {
+      return json(
+        {
+          error: "Forbidden",
+          reason: "Action is not declared in route intent",
+          action: context.action.name
+        },
+        { status: 403 }
+      );
+    }
+
+    const maxBytes = routeActionBodyLimit(context.route, actionBodyLimit);
+    const limited = await readLimitedActionRequest(context.request, maxBytes);
 
     if (limited.tooLarge) {
       return json(
         {
           error: "Payload Too Large",
-          limit: actionBodyLimit
+          limit: maxBytes
         },
         { status: 413 }
       );

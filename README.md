@@ -19,6 +19,7 @@ Send HTML first. Stream when useful. Hydrate only what needs browser state.
 - Interactive islands through declarative `<aster-island>` markers.
 - Same-origin client navigation for server-rendered pages.
 - Server actions for HTML forms through generated `/_aster/action/...` endpoints.
+- Aster Intent Graph for declared route capabilities and action enforcement.
 - Production action hardening: CSRF checks, body-size limits, and safe redirects.
 - Development server with public asset serving and live reload.
 - Production build output with a server/client module graph, hashed assets, and a copied server runtime.
@@ -29,7 +30,7 @@ Send HTML first. Stream when useful. Hydrate only what needs browser state.
 ```text
 packages/
   aster-core/      Request pipeline, HTML helpers, router, pages, islands, actions.
-  aster-compiler/  File-route discovery, JSX lowering, module graphing, hashed assets, server output.
+  aster-compiler/  File-route discovery, JSX lowering, module/intent graphing, hashed assets, server output.
   aster-dev/       Dependency-free development server and live reload.
   aster-node/      Node adapter for preview and production serving.
   aster-cli/       CLI commands for dev, routes, build, preview, and start.
@@ -213,6 +214,29 @@ External redirects must be explicit:
 redirect("https://docs.example/guide", 302, { allowExternal: true });
 ```
 
+## Intent Graph
+
+Routes can export an `intent` object that declares what the route is allowed to do. The first enforced capability is server actions: if `intent.actions` is present, Aster blocks generated actions that are not listed.
+
+```js
+import { action, html, page, redirect } from "@aster/core";
+
+export const intent = {
+  actions: ["sendMessage"],
+  navigation: "soft",
+  security: {
+    maxBody: "32kb"
+  }
+};
+
+export const sendMessage = action(async ({ formData }) => {
+  const name = formData.get("name");
+  return redirect(`/contact?sent=${encodeURIComponent(name)}`, 303);
+});
+```
+
+`aster build` emits `.aster/intent.json` and `.aster/output/intent-graph.json` with each route's declared capabilities, actions, and diagnostics. This is the beginning of Aster's compiler-level behavior contract: the framework can explain and enforce what a route intends to use.
+
 ## Streaming And Deferred Data
 
 Routes can stream page bodies:
@@ -327,9 +351,11 @@ The build writes:
 ```text
 examples/blog/.aster/manifest.json
 examples/blog/.aster/graph.json
+examples/blog/.aster/intent.json
 examples/blog/.aster/assets.json
 examples/blog/.aster/server.json
 examples/blog/.aster/output/module-graph.json
+examples/blog/.aster/output/intent-graph.json
 examples/blog/.aster/output/assets/
 examples/blog/.aster/output/server/
 ```
@@ -338,6 +364,7 @@ Build output includes:
 
 - A serializable route manifest.
 - A server/client module graph with entries, traced modules, externals, and diagnostics.
+- An Intent Graph with route capabilities, declared actions, and diagnostics.
 - Hashed public assets and traced browser island modules.
 - Rewritten island imports that point at hashed production asset URLs.
 - CSS minification for production asset output.
@@ -393,6 +420,7 @@ Current limitations:
 - External npm packages and imports outside the app root are recorded as externals, not bundled. Runtime dependencies must still be available in the deployment environment.
 - CSS assets are lightly minified, but JavaScript asset minification is not implemented.
 - Module graph boundary diagnostics are warnings, not hard build failures.
+- The Intent Graph currently enforces declared server actions and per-route action body limits; other capabilities are recorded but not enforced yet.
 - The default CSP still allows inline scripts/styles because Aster injects inline runtime code today.
 - Node is the only production adapter. The dev server also runs on Node, but worker/edge adapters do not exist yet.
 
@@ -400,6 +428,7 @@ Near-term roadmap:
 
 - TypeScript route and module compilation.
 - Hard server/client boundary enforcement from the module graph.
+- Expanded Intent Graph enforcement for cache, navigation, islands, and route security policy.
 - External dependency bundling for standalone deploy output.
 - JavaScript minification and production source maps.
 - Stronger CSP through nonces or externalized runtime scripts.

@@ -7,10 +7,12 @@ import test from "node:test";
 import {
   buildProductionAssets,
   buildServerOutput,
+  createIntentGraph,
   createModuleGraph,
   createRouteManifest,
   printRouteManifest,
-  routePatternFromFile
+  routePatternFromFile,
+  writeIntentGraph
 } from "../packages/aster-compiler/src/index.js";
 
 async function fixture() {
@@ -30,7 +32,7 @@ async function fixture() {
   await writeFile(path.join(routes, "index.page.js"), "export function GET() { return 'home'; }\n");
   await writeFile(
     path.join(routes, "contact.page.js"),
-    `import { action } from "${coreUrl}";\nexport const sendMessage = action(async () => ({ ok: true }));\nexport function GET() { return 'contact'; }\n`
+    `import { action } from "${coreUrl}";\nexport const intent = { actions: ["sendMessage"], security: { maxBody: "32kb" } };\nexport const sendMessage = action(async () => ({ ok: true }));\nexport function GET() { return 'contact'; }\n`
   );
   await writeFile(
     path.join(routes, "jsx.page.jsx"),
@@ -64,6 +66,12 @@ test("createRouteManifest imports route modules and captures methods", async () 
   assert.equal(routes.get("/")?.methods.join(","), "GET");
   assert.equal(routes.get("/jsx")?.methods.join(","), "GET");
   assert.equal(routes.get("/contact")?.actions[0]?.name, "sendMessage");
+  assert.deepEqual(routes.get("/contact")?.intent, {
+    actions: ["sendMessage"],
+    security: {
+      maxBody: "32kb"
+    }
+  });
   assert.equal(routes.get("/contact")?.actions[0]?.id, "app/routes/contact.page.js#sendMessage");
   assert.equal(
     routes.get("/contact")?.actions[0]?.path,
@@ -89,6 +97,28 @@ test("createRouteManifest imports route modules and captures methods", async () 
   assert.match(printRouteManifest(manifest), /\/blog\/:slug/);
   assert.match(printRouteManifest(manifest), /GET\+ACTIONS\s+\/contact/);
   assert.match(printRouteManifest(manifest), /app -> app\/routes\/blog/);
+});
+
+test("createIntentGraph serializes route intent and action diagnostics", async () => {
+  const { root } = await fixture();
+  const manifest = await createRouteManifest({ root, cacheBust: true });
+  const graph = createIntentGraph(manifest);
+  const contact = graph.routes.find((route) => route.pattern === "/contact");
+
+  assert.deepEqual(contact.intent.actions, ["sendMessage"]);
+  assert.deepEqual(contact.actions, [
+    {
+      id: "app/routes/contact.page.js#sendMessage",
+      name: "sendMessage",
+      path: "/_aster/action/app%2Froutes%2Fcontact.page.js%23sendMessage",
+      declared: true
+    }
+  ]);
+  assert.deepEqual(graph.diagnostics, []);
+
+  await writeIntentGraph(graph, { root });
+  assert.match(await readFile(path.join(root, ".aster/intent.json"), "utf8"), /"actions": \[/);
+  assert.match(await readFile(path.join(root, ".aster/output/intent-graph.json"), "utf8"), /"\/contact"/);
 });
 
 test("buildProductionAssets emits hashed public and app browser assets", async () => {

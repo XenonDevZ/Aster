@@ -4,6 +4,7 @@ export {
   rewriteAssetUrls
 } from "./build.js";
 export { createModuleGraph, parseModuleSpecifiers, resolveModuleSpecifier } from "./graph.js";
+export { createIntentGraph, writeIntentGraph } from "./intent.js";
 export {
   boundaryChainForRoute,
   createRouteManifest,

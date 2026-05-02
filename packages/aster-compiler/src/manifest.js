@@ -232,6 +232,20 @@ function bindRouteActions(routeModule, routeId) {
     });
 }
 
+function routeIntent(routeModule) {
+  const intent = routeModule.intent;
+
+  if (intent === undefined) {
+    return undefined;
+  }
+
+  if (!intent || typeof intent !== "object" || Array.isArray(intent)) {
+    throw new TypeError("Route intent must be an object export.");
+  }
+
+  return intent;
+}
+
 export async function createRouteManifest(options) {
   const root = path.resolve(options.root ?? process.cwd());
   const routesDirectory = path.resolve(root, options.routesDirectory ?? "app/routes");
@@ -302,6 +316,7 @@ export async function createRouteManifest(options) {
       filePath,
       pattern,
       methods,
+      intent: routeIntent(routeModule),
       actions,
       layouts: layoutChainForRoute(filePath, appDirectory, routesDirectory, layoutByDirectory),
       errorBoundaries: boundaryChainForRoute(filePath, appDirectory, routesDirectory, errorByDirectory),

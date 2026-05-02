@@ -87,6 +87,7 @@ export type RouteDefinition = {
   id?: string;
   pattern: string;
   methods?: string[];
+  intent?: RouteIntent;
   layouts?: LayoutDefinition[];
   errorBoundaries?: BoundaryDefinition[];
   loadingBoundaries?: BoundaryDefinition[];
@@ -94,8 +95,19 @@ export type RouteDefinition = {
   load?: Loader;
   meta?: MetaHandler;
   handler?: RouteHandler;
-  module?: Record<string, RouteHandler | Loader | MetaHandler | unknown>;
+  module?: Record<string, RouteHandler | Loader | MetaHandler | RouteIntent | unknown>;
 };
+
+export type RouteIntent = {
+  actions?: string[];
+  islands?: string[];
+  navigation?: "soft" | "reload" | false;
+  cache?: string | false;
+  security?: {
+    csrf?: boolean;
+    maxBody?: number | string | false;
+  };
+} & Record<string, unknown>;
 
 export type BoundaryDefinition = {
   id?: string;

@@ -426,6 +426,84 @@ test("app can enforce action CSRF and body size limits", async () => {
   assert.equal((await oversized.json()).limit, 16);
 });
 
+test("app enforces declared route action intent", async () => {
+  const saveMessage = bindAction(
+    action(async ({ formData }) => ({
+      ok: true,
+      name: formData.get("name")
+    })),
+    {
+      id: "app/routes/contact.page.js#saveMessage",
+      name: "saveMessage",
+      path: "/_aster/action/app%2Froutes%2Fcontact.page.js%23saveMessage",
+      routeId: "app/routes/contact.page.js"
+    }
+  );
+  const deleteMessage = bindAction(
+    action(async () => ({
+      ok: true
+    })),
+    {
+      id: "app/routes/contact.page.js#deleteMessage",
+      name: "deleteMessage",
+      path: "/_aster/action/app%2Froutes%2Fcontact.page.js%23deleteMessage",
+      routeId: "app/routes/contact.page.js"
+    }
+  );
+  const app = createApp({
+    routes: [
+      {
+        pattern: "/contact",
+        intent: {
+          actions: ["saveMessage"],
+          security: {
+            maxBody: "32kb"
+          }
+        },
+        actions: [
+          {
+            id: saveMessage.id,
+            name: saveMessage.name,
+            path: saveMessage.path,
+            ref: saveMessage
+          },
+          {
+            id: deleteMessage.id,
+            name: deleteMessage.name,
+            path: deleteMessage.path,
+            ref: deleteMessage
+          }
+        ],
+        module: {
+          GET() {
+            return page(html`<form method="post" action="${saveMessage}"></form>`);
+          }
+        }
+      }
+    ]
+  });
+
+  const allowed = await app.fetch(
+    new Request("http://example.test/_aster/action/app%2Froutes%2Fcontact.page.js%23saveMessage", {
+      method: "POST",
+      body: new URLSearchParams({ name: "Ada" })
+    })
+  );
+  const denied = await app.fetch(
+    new Request("http://example.test/_aster/action/app%2Froutes%2Fcontact.page.js%23deleteMessage", {
+      method: "POST",
+      body: new URLSearchParams({ name: "Ada" })
+    })
+  );
+  const deniedBody = await denied.json();
+
+  assert.equal(allowed.status, 200);
+  assert.deepEqual(await allowed.json(), { ok: true, name: "Ada" });
+  assert.equal(denied.status, 403);
+  assert.equal(deniedBody.reason, "Action is not declared in route intent");
+  assert.equal(deniedBody.action, "deleteMessage");
+});
+
 test("redirect helpers default to local safe targets", () => {
   const local = redirect("/contact?sent=Ada", 303);
   const external = redirect("https://evil.test/phish");

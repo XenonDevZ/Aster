@@ -3,12 +3,24 @@ export type RouteManifestEntry = {
   filePath: string;
   pattern: string;
   methods: string[];
+  intent?: RouteIntent;
   actions: ActionManifestEntry[];
   layouts: LayoutManifestEntry[];
   errorBoundaries: BoundaryManifestEntry[];
   loadingBoundaries: BoundaryManifestEntry[];
   module: Record<string, unknown>;
 };
+
+export type RouteIntent = {
+  actions?: string[];
+  islands?: string[];
+  navigation?: "soft" | "reload" | false;
+  cache?: string | false;
+  security?: {
+    csrf?: boolean;
+    maxBody?: number | string | false;
+  };
+} & Record<string, unknown>;
 
 export type ActionManifestEntry = {
   id: string;
@@ -80,6 +92,8 @@ export type ModuleGraphDiagnostic = {
   message: string;
   importer?: string;
   imported?: string;
+  route?: string;
+  action?: string;
 };
 
 export type ModuleGraph = {
@@ -119,6 +133,24 @@ export type ServerOutputManifest = {
   };
 };
 
+export type IntentGraphRoute = {
+  id: string;
+  pattern: string;
+  methods: string[];
+  intent: RouteIntent;
+  actions: Array<{ id: string; name: string; path: string; declared: boolean }>;
+  diagnostics: ModuleGraphDiagnostic[];
+};
+
+export type IntentGraph = {
+  version: number;
+  generatedAt: string;
+  root: string;
+  outputDirectory: string;
+  routes: IntentGraphRoute[];
+  diagnostics: ModuleGraphDiagnostic[];
+};
+
 export function routePatternFromFile(filePath: string, routesDirectory: string): string;
 export function discoverRouteFiles(routesDirectory: string): Promise<string[]>;
 export function discoverLayoutFiles(appDirectory: string, routesDirectory: string): Promise<string[]>;
@@ -149,6 +181,8 @@ export function createModuleGraph(options?: {
   serverEntries?: string[];
   clientEntries?: string[];
 }): Promise<ModuleGraph>;
+export function createIntentGraph(manifest: RouteManifest, options?: { outputDirectory?: string }): IntentGraph;
+export function writeIntentGraph(intentGraph: IntentGraph, options?: { root?: string; outputDirectory?: string }): Promise<IntentGraph>;
 export function buildProductionAssets(options?: {
   root?: string;
   outputDirectory?: string;

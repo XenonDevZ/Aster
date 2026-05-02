@@ -1,5 +1,13 @@
 import { action, html, page, redirect } from "../../../../packages/aster-core/src/index.js";
 
+export const intent = {
+  actions: ["sendMessage"],
+  navigation: "soft",
+  security: {
+    maxBody: "32kb"
+  }
+};
+
 export const sendMessage = action(async ({ formData }) => {
   const name = String(formData.get("name") ?? "").trim();
   const topic = String(formData.get("topic") ?? "").trim();

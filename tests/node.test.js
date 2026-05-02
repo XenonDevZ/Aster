@@ -149,7 +149,7 @@ export function GET() {
 `
   );
 
-  const handler = await createNodeHandler({ root });
+  const handler = await createNodeHandler({ root, requireBuild: true });
   const response = await handler(new Request("http://example.test/"));
   const body = await response.text();
 
@@ -157,4 +157,24 @@ export function GET() {
   assert.match(body, /Built server output/);
   assert.doesNotMatch(body, /Raw source changed after build/);
   assert.match(body, /\/_aster\/assets\/public\/styles\.[a-f0-9]{10}\.css/);
+});
+
+test("node adapter requireBuild fails before build output exists", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "aster-node-require-build-"));
+  const coreUrl = pathToFileURL(path.resolve("packages/aster-core/src/index.js")).href;
+
+  await mkdir(path.join(root, "app/routes"), { recursive: true });
+  await writeFile(
+    path.join(root, "app/routes/index.page.js"),
+    `import { page } from "${coreUrl}";
+export function GET() {
+  return page("not built yet");
+}
+`
+  );
+
+  await assert.rejects(
+    () => createNodeHandler({ root, requireBuild: true }),
+    /Aster server manifest was not found.*Run "aster build" before "aster start"/
+  );
 });

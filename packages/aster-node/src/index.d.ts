@@ -12,6 +12,7 @@ export type NodeServerOptions = {
   assetManifestPath?: string;
   serverBuild?: boolean;
   serverManifestPath?: string;
+  requireBuild?: boolean;
 };
 
 export type NodeServer = {

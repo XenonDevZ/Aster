@@ -16,12 +16,14 @@ function usage() {
 Usage:
   aster dev [root] [--host 127.0.0.1] [--port 3000]
   aster preview [root] [--host 127.0.0.1] [--port 4173]
+  aster start [root] [--host 127.0.0.1] [--port 3000]
   aster routes [root]
   aster build [root]
 
 Commands:
   dev      Start the dependency-free development server.
   preview  Start the production-style Node adapter.
+  start    Start the built production server. Requires aster build.
   routes   Print the file-route manifest.
   build    Emit production route and asset manifests.
 `;
@@ -66,6 +68,24 @@ async function preview(args) {
   const server = await startNodeServer({ root, port, host });
 
   console.log(`Aster preview server ready at ${server.url}`);
+  console.log(`Root: ${server.root}`);
+
+  async function shutdown() {
+    await server.close();
+    process.exit(0);
+  }
+
+  process.on("SIGINT", shutdown);
+  process.on("SIGTERM", shutdown);
+}
+
+async function start(args) {
+  const root = path.resolve(positional(args));
+  const port = Number(flag(args, "--port", 3000));
+  const host = flag(args, "--host", "127.0.0.1");
+  const server = await startNodeServer({ root, port, host, requireBuild: true });
+
+  console.log(`Aster production server ready at ${server.url}`);
   console.log(`Root: ${server.root}`);
 
   async function shutdown() {
@@ -133,6 +153,8 @@ try {
     await dev(args);
   } else if (command === "preview") {
     await preview(args);
+  } else if (command === "start") {
+    await start(args);
   } else if (command === "routes") {
     await routes(args);
   } else if (command === "build") {

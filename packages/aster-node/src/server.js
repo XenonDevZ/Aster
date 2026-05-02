@@ -79,6 +79,10 @@ async function readAssetManifest(root, options = {}) {
   const source = await readFile(manifestPath, "utf8").catch(() => null);
 
   if (!source) {
+    if (options.requireBuild) {
+      throw new Error(`Aster asset manifest was not found at ${manifestPath}. Run "aster build" before "aster start".`);
+    }
+
     return null;
   }
 
@@ -94,6 +98,10 @@ async function readServerManifest(root, options = {}) {
   const source = await readFile(manifestPath, "utf8").catch(() => null);
 
   if (!source) {
+    if (options.requireBuild) {
+      throw new Error(`Aster server manifest was not found at ${manifestPath}. Run "aster build" before "aster start".`);
+    }
+
     return null;
   }
 

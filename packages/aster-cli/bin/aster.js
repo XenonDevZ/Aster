@@ -2,6 +2,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import {
+  assertNoFatalDiagnostics,
   buildProductionAssets,
   buildServerOutput,
   createIntentGraph,
@@ -111,9 +112,10 @@ async function build(args) {
   const root = path.resolve(positional(args));
   const manifest = await createRouteManifest({ root });
   const graph = await createModuleGraph({ root });
+  const intentGraph = createIntentGraph(manifest);
+  assertNoFatalDiagnostics(graph.server.diagnostics, graph.client.diagnostics, intentGraph.diagnostics);
   const assetManifest = await buildProductionAssets({ root, graph });
   const serverManifest = await buildServerOutput({ root, graph });
-  const intentGraph = createIntentGraph(manifest);
   await writeIntentGraph(intentGraph, { root });
   const outDirectory = path.join(root, ".aster");
   const serializable = {

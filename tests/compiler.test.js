@@ -5,6 +5,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import test from "node:test";
 import {
+  assertNoFatalDiagnostics,
   buildProductionAssets,
   buildServerOutput,
   createIntentGraph,
@@ -121,32 +122,82 @@ test("createIntentGraph serializes route intent and action diagnostics", async (
   assert.match(await readFile(path.join(root, ".aster/output/intent-graph.json"), "utf8"), /"\/contact"/);
 });
 
+test("assertNoFatalDiagnostics fails unsafe graph and intent diagnostics", () => {
+  assert.throws(
+    () =>
+      assertNoFatalDiagnostics([
+        {
+          level: "warning",
+          code: "client-imports-server-module",
+          message: "Client island imports server code.",
+          importer: "app/components/counter.js",
+          imported: "app/lib/server.js"
+        }
+      ]),
+    /client-imports-server-module/
+  );
+
+  assert.throws(
+    () =>
+      assertNoFatalDiagnostics([
+        {
+          level: "warning",
+          code: "undeclared-route-action",
+          message: "Action not declared.",
+          route: "app/routes/contact.page.js",
+          action: "deleteMessage"
+        }
+      ]),
+    /undeclared-route-action/
+  );
+
+  assert.doesNotThrow(() =>
+    assertNoFatalDiagnostics([
+      {
+        level: "warning",
+        code: "informational",
+        message: "This remains non-fatal."
+      }
+    ])
+  );
+});
+
 test("buildProductionAssets emits hashed public and app browser assets", async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), "aster-assets-"));
 
   await mkdir(path.join(root, "public"), { recursive: true });
   await mkdir(path.join(root, "app/components"), { recursive: true });
   await writeFile(path.join(root, "public/styles.css"), "/* dev */\n.hero { color: teal; }\n");
-  await writeFile(path.join(root, "app/components/label.js"), "export const label = 'Count';\n");
+  await writeFile(path.join(root, "public/app.js"), "// public app\nconst   answer   =   42;\nconsole.log(answer);\n");
+  await writeFile(path.join(root, "app/components/label.js"), "// label helper\nexport   const   label   =   'Count';\n");
   await writeFile(
     path.join(root, "app/components/counter.js"),
-    "import { label } from './label.js';\nexport default function hydrate() { return label; }\n"
+    "/* counter island */\nimport   { label }   from   './label.js';\n\nexport default function hydrate() {\n  return   label;\n}\n"
   );
 
   const manifest = await buildProductionAssets({ root });
   const style = manifest.assets["/styles.css"];
+  const publicScript = manifest.assets["/app.js"];
   const counter = manifest.assets["/_aster/app/components/counter.js"];
   const label = manifest.assets["/_aster/app/components/label.js"];
+  const publicScriptOutput = await readFile(path.join(root, manifest.outputDirectory, publicScript.file), "utf8");
   const counterOutput = await readFile(path.join(root, manifest.outputDirectory, counter.file), "utf8");
+  const labelOutput = await readFile(path.join(root, manifest.outputDirectory, label.file), "utf8");
 
   assert.equal(manifest.outputDirectory, ".aster/output");
   assert.match(style.url, /^\/_aster\/assets\/public\/styles\.[a-f0-9]{10}\.css$/);
+  assert.match(publicScript.url, /^\/_aster\/assets\/public\/app\.[a-f0-9]{10}\.js$/);
   assert.match(counter.url, /^\/_aster\/assets\/app\/components\/counter\.[a-f0-9]{10}\.js$/);
   assert.match(label.url, /^\/_aster\/assets\/app\/components\/label\.[a-f0-9]{10}\.js$/);
   assert.equal(style.file.startsWith("assets/public/"), true);
   assert.equal(counter.file.startsWith("assets/app/components/"), true);
   assert.equal((await readFile(path.join(root, manifest.outputDirectory, style.file), "utf8")), ".hero{color:teal;}");
-  assert.match(counterOutput, new RegExp(`import \\{ label \\} from '${label.url.replaceAll("/", "\\/")}'`));
+  assert.doesNotMatch(publicScriptOutput, /public app/);
+  assert.match(publicScriptOutput, /const answer=42;/);
+  assert.doesNotMatch(counterOutput, /counter island/);
+  assert.doesNotMatch(counterOutput, / {2,}/);
+  assert.match(counterOutput, new RegExp(`import\\{label\\}from '${label.url.replaceAll("/", "\\/")}'`));
+  assert.equal(labelOutput, "export const label='Count';");
   assert.deepEqual(manifest.graph.modules, ["app/components/counter.js", "app/components/label.js"]);
   assert.match(await readFile(path.join(root, ".aster/assets.json"), "utf8"), /"\/styles\.css"/);
   assert.match(await readFile(path.join(root, ".aster/graph.json"), "utf8"), /"client"/);

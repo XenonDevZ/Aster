@@ -8,8 +8,43 @@ import { transformJsx } from "./jsx-transform.js";
 const DEFAULT_OUTPUT_DIRECTORY = ".aster/output";
 const DEFAULT_ASSETS_BASE = "/_aster/assets/";
 const APP_ASSET_EXTENSIONS = new Set([".css", ".js", ".json", ".mjs", ".png", ".svg", ".txt", ".webp"]);
+const JAVASCRIPT_ASSET_EXTENSIONS = new Set([".js", ".mjs"]);
 const REWRITABLE_CLIENT_EXTENSIONS = new Set([".js", ".mjs"]);
 const SERVER_FILE_EXTENSIONS = new Set([".js", ".mjs", ".jsx", ".json"]);
+const REGEX_PREFIX_CHARACTERS = new Set([
+  "(",
+  "{",
+  "[",
+  "=",
+  ":",
+  "+",
+  "-",
+  "!",
+  "?",
+  ",",
+  ";",
+  "*",
+  "&",
+  "|",
+  "^",
+  "~",
+  "<",
+  ">"
+]);
+const REGEX_PREFIX_KEYWORDS = new Set([
+  "return",
+  "throw",
+  "case",
+  "delete",
+  "void",
+  "typeof",
+  "instanceof",
+  "new",
+  "in",
+  "of",
+  "yield",
+  "await"
+]);
 const COMPILER_DIRECTORY = path.dirname(fileURLToPath(import.meta.url));
 const CORE_SOURCE_DIRECTORY = path.resolve(COMPILER_DIRECTORY, "../../aster-core/src");
 
@@ -97,12 +132,181 @@ function minifyCss(buffer) {
   );
 }
 
+function isLineBreak(char) {
+  return char === "\n" || char === "\r";
+}
+
+function isIdentifierChar(char) {
+  return typeof char === "string" && /[A-Za-z0-9_$]/.test(char);
+}
+
+function lastNonWhitespace(value) {
+  for (let index = value.length - 1; index >= 0; index -= 1) {
+    if (!/\s/.test(value[index])) {
+      return value[index];
+    }
+  }
+
+  return "";
+}
+
+function shouldKeepSpace(previous, next) {
+  return (
+    (isIdentifierChar(previous) && (isIdentifierChar(next) || next === "/" || next === "'" || next === "\"" || next === "`")) ||
+    (previous === "+" && next === "+") ||
+    (previous === "-" && next === "-")
+  );
+}
+
+function flushJavascriptWhitespace(output, whitespace, next) {
+  if (!whitespace.pending) {
+    return output;
+  }
+
+  if (whitespace.lineBreak) {
+    return output && !output.endsWith("\n") ? `${output}\n` : output;
+  }
+
+  return shouldKeepSpace(lastNonWhitespace(output), next) ? `${output} ` : output;
+}
+
+function expectsRegexLiteral(output) {
+  const trimmed = output.trimEnd();
+
+  if (!trimmed) {
+    return true;
+  }
+
+  const last = trimmed.at(-1);
+
+  if (REGEX_PREFIX_CHARACTERS.has(last)) {
+    return true;
+  }
+
+  const keyword = trimmed.match(/[A-Za-z_$][A-Za-z0-9_$]*$/)?.[0];
+  return REGEX_PREFIX_KEYWORDS.has(keyword);
+}
+
+function minifyJs(buffer) {
+  const source = buffer.toString("utf8");
+  const whitespace = { pending: false, lineBreak: false };
+  let output = "";
+  let index = 0;
+  let quote = "";
+  let escaped = false;
+  let regexLiteral = false;
+  let regexClass = false;
+
+  while (index < source.length) {
+    const char = source[index];
+    const next = source[index + 1];
+
+    if (quote) {
+      output += char;
+
+      if (escaped) {
+        escaped = false;
+      } else if (char === "\\") {
+        escaped = true;
+      } else if (char === quote) {
+        quote = "";
+      }
+
+      index += 1;
+      continue;
+    }
+
+    if (regexLiteral) {
+      output += char;
+
+      if (escaped) {
+        escaped = false;
+      } else if (char === "\\") {
+        escaped = true;
+      } else if (char === "[") {
+        regexClass = true;
+      } else if (char === "]") {
+        regexClass = false;
+      } else if (char === "/" && !regexClass) {
+        regexLiteral = false;
+      }
+
+      index += 1;
+      continue;
+    }
+
+    if (/\s/.test(char)) {
+      whitespace.pending = true;
+      whitespace.lineBreak ||= isLineBreak(char);
+      index += 1;
+      continue;
+    }
+
+    if (char === "/" && next === "/") {
+      whitespace.pending = true;
+      whitespace.lineBreak = true;
+
+      index += 2;
+      while (index < source.length && !isLineBreak(source[index])) {
+        index += 1;
+      }
+      continue;
+    }
+
+    if (char === "/" && next === "*") {
+      const end = source.indexOf("*/", index + 2);
+      const commentEnd = end === -1 ? source.length : end + 2;
+      const comment = source.slice(index, commentEnd);
+
+      whitespace.pending = true;
+      whitespace.lineBreak ||= /[\r\n]/.test(comment);
+      index = commentEnd;
+      continue;
+    }
+
+    output = flushJavascriptWhitespace(output, whitespace, char);
+    whitespace.pending = false;
+    whitespace.lineBreak = false;
+
+    if (char === "'" || char === "\"" || char === "`") {
+      quote = char;
+      output += char;
+      index += 1;
+      continue;
+    }
+
+    if (char === "/" && expectsRegexLiteral(output)) {
+      regexLiteral = true;
+      regexClass = false;
+      escaped = false;
+      output += char;
+      index += 1;
+      continue;
+    }
+
+    output += char;
+    index += 1;
+  }
+
+  return Buffer.from(output.trim());
+}
+
 function prepareAssetBytes(filePath, buffer, options) {
   if (options.minify === false) {
     return buffer;
   }
 
-  return path.extname(filePath) === ".css" ? minifyCss(buffer) : buffer;
+  const extension = path.extname(filePath);
+
+  if (extension === ".css") {
+    return minifyCss(buffer);
+  }
+
+  if (JAVASCRIPT_ASSET_EXTENSIONS.has(extension)) {
+    return minifyJs(buffer);
+  }
+
+  return buffer;
 }
 
 async function collectPublicAssets(root) {

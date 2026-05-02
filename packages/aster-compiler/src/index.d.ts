@@ -96,6 +96,10 @@ export type ModuleGraphDiagnostic = {
   action?: string;
 };
 
+export class BuildDiagnosticsError extends Error {
+  readonly diagnostics: ModuleGraphDiagnostic[];
+}
+
 export type ModuleGraph = {
   version: number;
   generatedAt: string;
@@ -183,6 +187,8 @@ export function createModuleGraph(options?: {
 }): Promise<ModuleGraph>;
 export function createIntentGraph(manifest: RouteManifest, options?: { outputDirectory?: string }): IntentGraph;
 export function writeIntentGraph(intentGraph: IntentGraph, options?: { root?: string; outputDirectory?: string }): Promise<IntentGraph>;
+export function fatalDiagnostics(...sources: Array<ModuleGraphDiagnostic[] | undefined>): ModuleGraphDiagnostic[];
+export function assertNoFatalDiagnostics(...sources: Array<ModuleGraphDiagnostic[] | undefined>): void;
 export function buildProductionAssets(options?: {
   root?: string;
   outputDirectory?: string;

@@ -365,9 +365,10 @@ Build output includes:
 - A serializable route manifest.
 - A server/client module graph with entries, traced modules, externals, and diagnostics.
 - An Intent Graph with route capabilities, declared actions, and diagnostics.
+- Build failure for unsafe server/client boundary diagnostics and route intent/action mismatches.
 - Hashed public assets and traced browser island modules.
 - Rewritten island imports that point at hashed production asset URLs.
-- CSS minification for production asset output.
+- Light CSS and browser JavaScript minification for production asset output.
 - A server output folder containing traced server modules instead of the entire source tree.
 - Compiled `.jsx` server files.
 - A copied Aster core runtime used by the built server output.
@@ -418,8 +419,7 @@ Current limitations:
 
 - No TypeScript route/module compilation yet. Route discovery covers `.js`, `.mjs`, and `.jsx`; module graph resolution covers `.js`, `.mjs`, `.jsx`, and `.json`.
 - External npm packages and imports outside the app root are recorded as externals, not bundled. Runtime dependencies must still be available in the deployment environment.
-- CSS assets are lightly minified, but JavaScript asset minification is not implemented.
-- Module graph boundary diagnostics are warnings, not hard build failures.
+- Browser asset minification is intentionally conservative. It removes comments and normalizes whitespace, but it is not a full JavaScript optimizer.
 - The Intent Graph currently enforces declared server actions and per-route action body limits; other capabilities are recorded but not enforced yet.
 - The default CSP still allows inline scripts/styles because Aster injects inline runtime code today.
 - Node is the only production adapter. The dev server also runs on Node, but worker/edge adapters do not exist yet.
@@ -427,10 +427,9 @@ Current limitations:
 Near-term roadmap:
 
 - TypeScript route and module compilation.
-- Hard server/client boundary enforcement from the module graph.
 - Expanded Intent Graph enforcement for cache, navigation, islands, and route security policy.
 - External dependency bundling for standalone deploy output.
-- JavaScript minification and production source maps.
+- Full JavaScript optimization and production source maps.
 - Stronger CSP through nonces or externalized runtime scripts.
 - Worker and edge deployment adapters.
 - Production diagnostics, tracing, and structured logs.

@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import test from "node:test";
-import { buildProductionAssets } from "../packages/aster-compiler/src/index.js";
+import { buildProductionAssets, buildServerOutput } from "../packages/aster-compiler/src/index.js";
 import { createNodeHandler } from "../packages/aster-node/src/index.js";
 
 test("node adapter serves production-style pages and assets", async () => {
@@ -116,4 +116,45 @@ export function GET() {
   assert.equal(await styleResponse.text(), ".hero{color:teal;}");
   assert.equal(componentResponse.status, 200);
   assert.equal(rawComponentResponse.status, 404);
+});
+
+test("node adapter prefers built server output over raw source", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "aster-node-server-output-"));
+  const coreUrl = pathToFileURL(path.resolve("packages/aster-core/src/index.js")).href;
+  const routeFile = path.join(root, "app/routes/index.page.js");
+
+  await mkdir(path.join(root, "app/routes"), { recursive: true });
+  await mkdir(path.join(root, "public"), { recursive: true });
+  await writeFile(path.join(root, "public/styles.css"), ".hero { color: teal; }\n");
+  await writeFile(
+    routeFile,
+    `import { html, page } from "${coreUrl}";
+export function GET() {
+  return page(html\`<main class="hero">Built server output</main>\`, {
+    title: "Built server",
+    head: html\`<link rel="stylesheet" href="/styles.css" />\`
+  });
+}
+`
+  );
+
+  await buildProductionAssets({ root });
+  await buildServerOutput({ root });
+  await writeFile(
+    routeFile,
+    `import { html, page } from "${coreUrl}";
+export function GET() {
+  return page(html\`<main>Raw source changed after build</main>\`);
+}
+`
+  );
+
+  const handler = await createNodeHandler({ root });
+  const response = await handler(new Request("http://example.test/"));
+  const body = await response.text();
+
+  assert.equal(response.status, 200);
+  assert.match(body, /Built server output/);
+  assert.doesNotMatch(body, /Raw source changed after build/);
+  assert.match(body, /\/_aster\/assets\/public\/styles\.[a-f0-9]{10}\.css/);
 });

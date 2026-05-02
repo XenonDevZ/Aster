@@ -85,6 +85,29 @@ async function readAssetManifest(root, options = {}) {
   return JSON.parse(source);
 }
 
+async function readServerManifest(root, options = {}) {
+  if (options.serverBuild === false) {
+    return null;
+  }
+
+  const manifestPath = path.resolve(root, options.serverManifestPath ?? ".aster/server.json");
+  const source = await readFile(manifestPath, "utf8").catch(() => null);
+
+  if (!source) {
+    return null;
+  }
+
+  return JSON.parse(source);
+}
+
+function builtServerRoot(root, manifest) {
+  if (!manifest?.outputDirectory || !manifest?.serverRoot) {
+    return root;
+  }
+
+  return path.resolve(root, manifest.outputDirectory, manifest.serverRoot);
+}
+
 async function rewriteAssetResponse(response, manifest) {
   if (!manifest?.assets || !response.body) {
     return response;
@@ -142,7 +165,9 @@ function applySecurityHeaders(response, options = {}) {
 
 export async function createNodeHandler(options = {}) {
   const root = path.resolve(options.root ?? process.cwd());
-  const manifest = await createRouteManifest({ root, cacheBust: false });
+  const serverManifest = await readServerManifest(root, options);
+  const routeRoot = builtServerRoot(root, serverManifest);
+  const manifest = await createRouteManifest({ root: routeRoot, cacheBust: false });
   const assetManifest = await readAssetManifest(root, options);
   const app = createApp({
     routes: manifest.routes,
@@ -170,7 +195,7 @@ export async function createNodeHandler(options = {}) {
       return applySecurityHeaders(builtAsset, options);
     }
 
-    if (assetManifest && url.pathname.startsWith("/_aster/app/")) {
+    if ((assetManifest || serverManifest) && url.pathname.startsWith("/_aster/app/")) {
       return applySecurityHeaders(json({ error: "Asset Not Found" }, { status: 404 }), options);
     }
 

@@ -6,6 +6,7 @@ import { pathToFileURL } from "node:url";
 import test from "node:test";
 import {
   buildProductionAssets,
+  buildServerOutput,
   createRouteManifest,
   printRouteManifest,
   routePatternFromFile
@@ -108,4 +109,38 @@ test("buildProductionAssets emits hashed public and app browser assets", async (
   assert.equal(counter.file.startsWith("assets/app/components/"), true);
   assert.equal((await readFile(path.join(root, manifest.outputDirectory, style.file), "utf8")), ".hero{color:teal;}");
   assert.match(await readFile(path.join(root, ".aster/assets.json"), "utf8"), /"\/styles\.css"/);
+});
+
+test("buildServerOutput copies server app files and rewrites runtime imports", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "aster-server-output-"));
+  const coreUrl = pathToFileURL(path.resolve("packages/aster-core/src/index.js")).href;
+
+  await mkdir(path.join(root, "app/routes"), { recursive: true });
+  await mkdir(path.join(root, "app/components"), { recursive: true });
+  await writeFile(path.join(root, "app/components/counter.js"), "export default function hydrate() {}\n");
+  await writeFile(
+    path.join(root, "app/routes/jsx.page.jsx"),
+    `import { page } from "${coreUrl}";
+export function GET() {
+  return page(<main>Built JSX</main>, { title: "Built" });
+}
+`
+  );
+
+  const manifest = await buildServerOutput({ root });
+  const routeOutput = await readFile(path.join(root, ".aster/output/server/app/routes/jsx.page.js"), "utf8");
+  const copiedCore = await readFile(path.join(root, ".aster/output/server/packages/aster-core/src/index.js"), "utf8");
+
+  assert.equal(manifest.serverRoot, "server");
+  assert.deepEqual(manifest.files, [
+    {
+      source: "app/routes/jsx.page.jsx",
+      file: "server/app/routes/jsx.page.js"
+    }
+  ]);
+  assert.match(routeOutput, /__asterJsx\("main"/);
+  assert.match(routeOutput, /packages\/aster-core\/src\/index\.js/);
+  assert.doesNotMatch(routeOutput, /file:\/\//);
+  assert.match(copiedCore, /export \{ action/);
+  assert.match(await readFile(path.join(root, ".aster/server.json"), "utf8"), /"serverRoot": "server"/);
 });

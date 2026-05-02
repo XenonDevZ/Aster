@@ -1,7 +1,12 @@
 #!/usr/bin/env node
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { buildProductionAssets, createRouteManifest, printRouteManifest } from "../../aster-compiler/src/index.js";
+import {
+  buildProductionAssets,
+  buildServerOutput,
+  createRouteManifest,
+  printRouteManifest
+} from "../../aster-compiler/src/index.js";
 import { startDevServer } from "../../aster-dev/src/index.js";
 import { startNodeServer } from "../../aster-node/src/index.js";
 
@@ -83,6 +88,7 @@ async function build(args) {
   const root = path.resolve(positional(args));
   const manifest = await createRouteManifest({ root });
   const assetManifest = await buildProductionAssets({ root });
+  const serverManifest = await buildServerOutput({ root });
   const outDirectory = path.join(root, ".aster");
   const serializable = {
     root: manifest.root,
@@ -117,6 +123,7 @@ async function build(args) {
   console.log(`Wrote ${path.relative(process.cwd(), path.join(outDirectory, "manifest.json"))}`);
   console.log(`Wrote ${path.relative(process.cwd(), path.join(outDirectory, "assets.json"))}`);
   console.log(`Built ${Object.keys(assetManifest.assets).length} hashed assets in ${assetManifest.outputDirectory}`);
+  console.log(`Built ${serverManifest.files.length} server files in ${serverManifest.outputDirectory}/server`);
 }
 
 const [command, ...args] = process.argv.slice(2);

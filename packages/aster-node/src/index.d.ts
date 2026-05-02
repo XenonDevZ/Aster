@@ -10,6 +10,8 @@ export type NodeServerOptions = {
   contentSecurityPolicy?: string | false;
   assets?: boolean;
   assetManifestPath?: string;
+  serverBuild?: boolean;
+  serverManifestPath?: string;
 };
 
 export type NodeServer = {

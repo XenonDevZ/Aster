@@ -12,7 +12,7 @@ then hydrate only the components that actually need browser state.
 ## What Exists
 
 - `@aster/core`: request pipeline, router, middleware, HTML helpers, page rendering, responses, and islands.
-- `@aster/compiler`: file-route discovery, manifest generation, and hashed production assets.
+- `@aster/compiler`: file-route discovery, manifest generation, hashed assets, and deploy output.
 - Nested layouts from `app/layout.js` and route segment `layout.js` files.
 - `@aster/dev`: dependency-free Node dev server with public file serving and app module serving.
 - `@aster/cli`: `dev`, `preview`, `routes`, and `build` commands.
@@ -27,6 +27,7 @@ then hydrate only the components that actually need browser state.
 - Route error boundaries discovered from `error.js` / `error.jsx`.
 - Deferred loader data with loading boundaries and streamed replacement.
 - Production build output with hashed `public/` assets and browser island modules.
+- Server deploy output that copies route/layout modules, compiles JSX server files, and rewrites runtime imports.
 
 ## Route Model
 
@@ -248,10 +249,14 @@ The build writes:
 ```text
 examples/blog/.aster/manifest.json
 examples/blog/.aster/assets.json
+examples/blog/.aster/server.json
 examples/blog/.aster/output/assets/
+examples/blog/.aster/output/server/
 ```
 
 When `.aster/assets.json` exists, the Node adapter rewrites HTML references like `/styles.css` and `/_aster/app/components/counter.js` to hashed URLs under `/_aster/assets/...`, serves those files with immutable cache headers, and stops exposing raw `/_aster/app/...` source modules.
+
+When `.aster/server.json` exists, the Node adapter loads routes from `.aster/output/server/app` instead of the raw source `app/` directory. That makes preview closer to deployment: source files can change after `build`, but preview still runs the built server output until you build again.
 
 ## Error Boundaries
 

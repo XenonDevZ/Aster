@@ -57,6 +57,19 @@ export type ProductionAssetManifest = {
   assets: Record<string, ProductionAssetEntry>;
 };
 
+export type ServerOutputManifest = {
+  version: number;
+  generatedAt: string;
+  outputDirectory: string;
+  serverRoot: string;
+  appDirectory: string;
+  files: Array<{ source: string; file: string }>;
+  runtime: {
+    "@aster/core": string;
+    files: string[];
+  };
+};
+
 export function routePatternFromFile(filePath: string, routesDirectory: string): string;
 export function discoverRouteFiles(routesDirectory: string): Promise<string[]>;
 export function discoverLayoutFiles(appDirectory: string, routesDirectory: string): Promise<string[]>;
@@ -87,5 +100,10 @@ export function buildProductionAssets(options?: {
   clean?: boolean;
   minify?: boolean;
 }): Promise<ProductionAssetManifest>;
+export function buildServerOutput(options?: {
+  root?: string;
+  outputDirectory?: string;
+  clean?: boolean;
+}): Promise<ServerOutputManifest>;
 export function rewriteAssetUrls(markup: string, manifest?: ProductionAssetManifest | null): string;
 export function printRouteManifest(manifest: RouteManifest): string;

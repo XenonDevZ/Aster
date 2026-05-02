@@ -1,5 +1,6 @@
 export {
   buildProductionAssets,
+  buildServerOutput,
   rewriteAssetUrls
 } from "./build.js";
 export {

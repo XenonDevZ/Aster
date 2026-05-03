@@ -17,29 +17,70 @@ export class DeferredData<T = unknown> {
   name?: string;
 }
 
-export type AsterContext<Env = unknown, Locals extends Record<string, unknown> = Record<string, unknown>> = {
+export type MaybePromise<T> = T | Promise<T>;
+export type RouteParams = Record<string, string>;
+export type RouteLocals = Record<string, unknown>;
+export type RouteResult = unknown;
+export type HttpMethod = "DELETE" | "GET" | "HEAD" | "OPTIONS" | "PATCH" | "POST" | "PUT";
+
+export type AsterContext<
+  Env = unknown,
+  Locals extends RouteLocals = RouteLocals,
+  Params extends object = RouteParams,
+  Data = unknown
+> = {
   request: Request;
   url: URL;
-  params: Record<string, string>;
-  route: RouteDefinition;
+  params: Params;
+  route: RouteDefinition<Params, Data, Env, Locals>;
   locals: Locals;
   env: Env;
   execution: unknown;
-  data?: unknown;
+  data?: Data;
   error?: Error;
-  action?: ActionManifestEntry;
+  action?: ActionManifestEntry<Params, Data, Env, Locals>;
   formData?: FormData;
 };
 
-export type ActionHandler = (
-  context: AsterContext & {
-    formData: FormData;
-    action: ActionRef;
-  }
-) => Response | HtmlValue | PageResult | unknown | Promise<Response | HtmlValue | PageResult | unknown>;
+export type RouteContext<
+  Params extends object = RouteParams,
+  Data = unknown,
+  Env = unknown,
+  Locals extends RouteLocals = RouteLocals
+> = Omit<AsterContext<Env, Locals, Params, Data>, "data"> & {
+  data: Data;
+};
 
-export class ActionRef {
-  readonly handler: ActionHandler;
+export type LoaderContext<
+  Params extends object = RouteParams,
+  Env = unknown,
+  Locals extends RouteLocals = RouteLocals
+> = AsterContext<Env, Locals, Params, unknown>;
+
+export type ActionContext<
+  Params extends object = RouteParams,
+  Data = unknown,
+  Env = unknown,
+  Locals extends RouteLocals = RouteLocals
+> = AsterContext<Env, Locals, Params, Data> & {
+    formData: FormData;
+    action: ActionRef<Params, Data, Env, Locals>;
+  };
+
+export type ActionHandler<
+  Params extends object = RouteParams,
+  Data = unknown,
+  Env = unknown,
+  Locals extends RouteLocals = RouteLocals
+> = (context: ActionContext<Params, Data, Env, Locals>) => MaybePromise<RouteResult>;
+
+export class ActionRef<
+  Params extends object = RouteParams,
+  Data = unknown,
+  Env = unknown,
+  Locals extends RouteLocals = RouteLocals
+> {
+  readonly handler: ActionHandler<Params, Data, Env, Locals>;
   name?: string;
   id?: string;
   path?: string;
@@ -47,16 +88,33 @@ export class ActionRef {
   toString(): string;
 }
 
-export type ActionManifestEntry = {
+export type ActionManifestEntry<
+  Params extends object = RouteParams,
+  Data = unknown,
+  Env = unknown,
+  Locals extends RouteLocals = RouteLocals
+> = {
   id: string;
   name: string;
   path: string;
-  ref: ActionRef;
-  route?: RouteDefinition;
+  ref: ActionRef<Params, Data, Env, Locals>;
+  route?: RouteDefinition<Params, Data, Env, Locals>;
 };
 
-export type RouteHandler = (context: AsterContext) => Response | HtmlValue | PageResult | unknown | Promise<Response | HtmlValue | PageResult | unknown>;
-export type Loader = (context: AsterContext) => unknown | Promise<unknown>;
+export type RouteHandler<
+  Params extends object = RouteParams,
+  Data = unknown,
+  Env = unknown,
+  Locals extends RouteLocals = RouteLocals
+> = (context: RouteContext<Params, Data, Env, Locals>) => MaybePromise<RouteResult>;
+
+export type Loader<
+  Params extends object = RouteParams,
+  Data = unknown,
+  Env = unknown,
+  Locals extends RouteLocals = RouteLocals
+> = (context: LoaderContext<Params, Env, Locals>) => MaybePromise<Data>;
+
 export type MetaResult =
   | string
   | HtmlString
@@ -68,34 +126,76 @@ export type MetaResult =
       link?: Array<Record<string, string | number | boolean | null | undefined>> | Record<string, string | number | boolean | null | undefined>;
       head?: HtmlValue;
     };
-export type MetaHandler = (input: {
-  context: AsterContext;
-  data: unknown;
+
+export type MetaInput<
+  Params extends object = RouteParams,
+  Data = unknown,
+  Env = unknown,
+  Locals extends RouteLocals = RouteLocals
+> = {
+  context: RouteContext<Params, Data, Env, Locals>;
+  data: Data;
   page: PageResult;
-  params: Record<string, string>;
-  locals: Record<string, unknown>;
+  params: Params;
+  locals: Locals;
   request?: Request;
   url?: URL;
-}) => MetaResult | Promise<MetaResult>;
+};
 
-export type Middleware = (
-  context: AsterContext,
+export type MetaHandler<
+  Params extends object = RouteParams,
+  Data = unknown,
+  Env = unknown,
+  Locals extends RouteLocals = RouteLocals
+> = (input: MetaInput<Params, Data, Env, Locals>) => MaybePromise<MetaResult>;
+
+export type Middleware<
+  Env = unknown,
+  Locals extends RouteLocals = RouteLocals,
+  Params extends object = RouteParams,
+  Data = unknown
+> = (
+  context: AsterContext<Env, Locals, Params, Data>,
   next: () => Promise<Response>
-) => Response | Promise<Response>;
+) => MaybePromise<Response>;
 
-export type RouteDefinition = {
+export type RouteModule<
+  Params extends object = RouteParams,
+  Data = unknown,
+  Env = unknown,
+  Locals extends RouteLocals = RouteLocals
+> = {
+  default?: RouteHandler<Params, Data, Env, Locals>;
+  DELETE?: RouteHandler<Params, Data, Env, Locals>;
+  GET?: RouteHandler<Params, Data, Env, Locals>;
+  HEAD?: RouteHandler<Params, Data, Env, Locals>;
+  OPTIONS?: RouteHandler<Params, Data, Env, Locals>;
+  PATCH?: RouteHandler<Params, Data, Env, Locals>;
+  POST?: RouteHandler<Params, Data, Env, Locals>;
+  PUT?: RouteHandler<Params, Data, Env, Locals>;
+  load?: Loader<Params, Data, Env, Locals>;
+  meta?: MetaHandler<Params, Data, Env, Locals>;
+  intent?: RouteIntent;
+} & Record<string, unknown>;
+
+export type RouteDefinition<
+  Params extends object = RouteParams,
+  Data = unknown,
+  Env = unknown,
+  Locals extends RouteLocals = RouteLocals
+> = {
   id?: string;
   pattern: string;
-  methods?: string[];
+  methods?: HttpMethod[] | string[];
   intent?: RouteIntent;
-  layouts?: LayoutDefinition[];
-  errorBoundaries?: BoundaryDefinition[];
-  loadingBoundaries?: BoundaryDefinition[];
-  actions?: ActionManifestEntry[];
-  load?: Loader;
-  meta?: MetaHandler;
-  handler?: RouteHandler;
-  module?: Record<string, RouteHandler | Loader | MetaHandler | RouteIntent | unknown>;
+  layouts?: LayoutDefinition<Params, Data, Env, Locals>[];
+  errorBoundaries?: BoundaryDefinition<Params, Data, Env, Locals>[];
+  loadingBoundaries?: BoundaryDefinition<Params, Data, Env, Locals>[];
+  actions?: ActionManifestEntry<Params, Data, Env, Locals>[];
+  load?: Loader<Params, Data, Env, Locals>;
+  meta?: MetaHandler<Params, Data, Env, Locals>;
+  handler?: RouteHandler<Params, Data, Env, Locals>;
+  module?: RouteModule<Params, Data, Env, Locals>;
 };
 
 export type RouteIntent = {
@@ -109,60 +209,106 @@ export type RouteIntent = {
   };
 } & Record<string, unknown>;
 
-export type BoundaryDefinition = {
+export type BoundaryDefinition<
+  Params extends object = RouteParams,
+  Data = unknown,
+  Env = unknown,
+  Locals extends RouteLocals = RouteLocals
+> = {
   id?: string;
   filePath?: string;
-  render?: ErrorBoundaryHandler | LoadingBoundaryHandler;
+  render?: ErrorBoundaryHandler<Params, Data, Env, Locals> | LoadingBoundaryHandler<Params, Data, Env, Locals>;
   module?: {
-    default?: ErrorBoundaryHandler;
-    Error?: ErrorBoundaryHandler;
-    error?: ErrorBoundaryHandler;
-    Loading?: LoadingBoundaryHandler;
-    loading?: LoadingBoundaryHandler;
-    meta?: MetaHandler;
+    default?: ErrorBoundaryHandler<Params, Data, Env, Locals>;
+    Error?: ErrorBoundaryHandler<Params, Data, Env, Locals>;
+    error?: ErrorBoundaryHandler<Params, Data, Env, Locals>;
+    Loading?: LoadingBoundaryHandler<Params, Data, Env, Locals>;
+    loading?: LoadingBoundaryHandler<Params, Data, Env, Locals>;
+    meta?: MetaHandler<Params, Data, Env, Locals>;
   } & Record<string, unknown>;
 };
 
-export type ErrorBoundaryHandler = (input: {
+export type ErrorBoundaryInput<
+  Params extends object = RouteParams,
+  Data = unknown,
+  Env = unknown,
+  Locals extends RouteLocals = RouteLocals
+> = {
   error: Error;
-  context: AsterContext;
-  data?: unknown;
+  context: RouteContext<Params, Data, Env, Locals>;
+  data?: Data;
   request?: Request;
   url?: URL;
-  params: Record<string, string>;
-  locals: Record<string, unknown>;
-}) => HtmlValue | PageResult | Promise<HtmlValue | PageResult>;
+  params: Params;
+  locals: Locals;
+};
 
-export type LoadingBoundaryHandler = (input: {
-  context: AsterContext;
-  data?: unknown;
+export type ErrorBoundaryHandler<
+  Params extends object = RouteParams,
+  Data = unknown,
+  Env = unknown,
+  Locals extends RouteLocals = RouteLocals
+> = (input: ErrorBoundaryInput<Params, Data, Env, Locals>) => MaybePromise<HtmlValue | PageResult>;
+
+export type LoadingBoundaryInput<
+  Params extends object = RouteParams,
+  Data = unknown,
+  Env = unknown,
+  Locals extends RouteLocals = RouteLocals
+> = {
+  context: RouteContext<Params, Data, Env, Locals>;
+  data?: Data;
   request?: Request;
   url?: URL;
-  params: Record<string, string>;
-  locals: Record<string, unknown>;
-}) => HtmlValue | Promise<HtmlValue>;
+  params: Params;
+  locals: Locals;
+};
 
-export type LayoutDefinition = {
+export type LoadingBoundaryHandler<
+  Params extends object = RouteParams,
+  Data = unknown,
+  Env = unknown,
+  Locals extends RouteLocals = RouteLocals
+> = (input: LoadingBoundaryInput<Params, Data, Env, Locals>) => MaybePromise<HtmlValue>;
+
+export type LayoutDefinition<
+  Params extends object = RouteParams,
+  Data = unknown,
+  Env = unknown,
+  Locals extends RouteLocals = RouteLocals
+> = {
   id?: string;
   filePath?: string;
-  render?: LayoutHandler;
+  render?: LayoutHandler<Params, Data, Env, Locals>;
   module?: {
-    default?: LayoutHandler;
-    layout?: LayoutHandler;
-    meta?: MetaHandler;
+    default?: LayoutHandler<Params, Data, Env, Locals>;
+    layout?: LayoutHandler<Params, Data, Env, Locals>;
+    meta?: MetaHandler<Params, Data, Env, Locals>;
   } & Record<string, unknown>;
 };
 
-export type LayoutHandler = (input: {
+export type LayoutInput<
+  Params extends object = RouteParams,
+  Data = unknown,
+  Env = unknown,
+  Locals extends RouteLocals = RouteLocals
+> = {
   children: HtmlString | HtmlStream;
   page: PageResult;
-  context: AsterContext;
-  data?: unknown;
+  context: RouteContext<Params, Data, Env, Locals>;
+  data?: Data;
   request?: Request;
   url?: URL;
-  params: Record<string, string>;
-  locals: Record<string, unknown>;
-}) => HtmlValue | PageResult | Promise<HtmlValue | PageResult>;
+  params: Params;
+  locals: Locals;
+};
+
+export type LayoutHandler<
+  Params extends object = RouteParams,
+  Data = unknown,
+  Env = unknown,
+  Locals extends RouteLocals = RouteLocals
+> = (input: LayoutInput<Params, Data, Env, Locals>) => MaybePromise<HtmlValue | PageResult>;
 
 export type PageResult = {
   body: HtmlString | HtmlStream;
@@ -172,28 +318,44 @@ export type PageResult = {
   headers: HeadersInit;
 };
 
-export type AppOptions = {
-  routes: RouteDefinition[];
-  middleware?: Middleware[];
-  document?: (page: PageResult, context: AsterContext) => HtmlString | HtmlStream;
-  notFound?: (context: Partial<AsterContext> & { request: Request; url: URL }) => unknown | Promise<unknown>;
-  onError?: (error: Error, context: AsterContext) => unknown | Promise<unknown>;
+export type AppOptions<Env = unknown, Locals extends RouteLocals = RouteLocals> = {
+  routes: RouteDefinition<RouteParams, unknown, Env, Locals>[];
+  middleware?: Middleware<Env, Locals>[];
+  document?: (page: PageResult, context: AsterContext<Env, Locals>) => HtmlString | HtmlStream;
+  notFound?: (context: Partial<AsterContext<Env, Locals>> & { request: Request; url: URL }) => MaybePromise<unknown>;
+  onError?: (error: Error, context: AsterContext<Env, Locals>) => MaybePromise<unknown>;
   actionCsrf?: "lax" | "strict" | false;
   allowedActionOrigins?: string[];
   maxActionBodySize?: number | false;
 };
 
-export type AsterApp = {
-  routes: RouteDefinition[];
+export type AsterApp<Env = unknown, Locals extends RouteLocals = RouteLocals> = {
+  routes: RouteDefinition<RouteParams, unknown, Env, Locals>[];
   router: ReturnType<typeof createRouter>;
-  actions: Map<string, ActionManifestEntry>;
+  actions: Map<string, ActionManifestEntry<RouteParams, unknown, Env, Locals>>;
   fetch(request: Request, env?: unknown, execution?: unknown): Promise<Response>;
 };
 
-export function action(handler: ActionHandler, options?: { name?: string; id?: string; path?: string; routeId?: string }): ActionRef;
-export function bindAction(ref: ActionRef, metadata: { id: string; name?: string; path: string; routeId?: string }): ActionRef;
+export function action<
+  Params extends object = RouteParams,
+  Data = unknown,
+  Env = unknown,
+  Locals extends RouteLocals = RouteLocals
+>(
+  handler: ActionHandler<Params, Data, Env, Locals>,
+  options?: { name?: string; id?: string; path?: string; routeId?: string }
+): ActionRef<Params, Data, Env, Locals>;
+export function bindAction<
+  Params extends object = RouteParams,
+  Data = unknown,
+  Env = unknown,
+  Locals extends RouteLocals = RouteLocals
+>(
+  ref: ActionRef<Params, Data, Env, Locals>,
+  metadata: { id: string; name?: string; path: string; routeId?: string }
+): ActionRef<Params, Data, Env, Locals>;
 export function isAction(value: unknown): value is ActionRef;
-export function createApp(options: AppOptions): AsterApp;
+export function createApp<Env = unknown, Locals extends RouteLocals = RouteLocals>(options: AppOptions<Env, Locals>): AsterApp<Env, Locals>;
 export function defer<T>(value: T | Promise<T>, options?: { fallback?: HtmlValue | Promise<HtmlValue>; name?: string }): DeferredData<T>;
 export function isDeferred(value: unknown): value is DeferredData;
 export function setDeferredFallback(value: unknown, fallback: HtmlValue | Promise<HtmlValue>): unknown;

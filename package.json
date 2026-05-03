@@ -6,6 +6,7 @@
   "description": "A compiler-driven, server-first web framework prototype with SSR, file routing, middleware, and islands.",
   "scripts": {
     "test": "node --test tests/*.test.js",
+    "typecheck": "tsc -p tsconfig.types.json",
     "dev:example": "node packages/aster-cli/bin/aster.js dev examples/blog --port 3000",
     "build:example": "node packages/aster-cli/bin/aster.js build examples/blog",
     "preview:example": "node packages/aster-cli/bin/aster.js preview examples/blog --port 4173",
@@ -17,5 +18,8 @@
   ],
   "engines": {
     "node": ">=20.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0"
   }
 }

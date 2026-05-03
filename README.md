@@ -11,11 +11,11 @@ Send HTML first. Stream when useful. Hydrate only what needs browser state.
 ## Highlights
 
 - File-based routing with dynamic, catch-all, and route-group segments.
-- Nested layouts from `app/layout.js`, `app/layout.mjs`, `app/layout.jsx`, and matching route segment layout files.
+- Nested layouts from `app/layout.js`, `app/layout.mjs`, `app/layout.jsx`, `app/layout.ts`, `app/layout.tsx`, and matching route segment layout files.
 - Server-rendered pages with metadata/head management.
 - Route loaders, streaming SSR, deferred loader data, and loading boundaries.
 - Route error boundaries with nearest-boundary recovery.
-- JSX route and boundary compilation for `.jsx` files.
+- JSX and TypeScript route/module compilation for server `.jsx`, `.ts`, and `.tsx` files, plus `.ts` browser islands.
 - Interactive islands through declarative `<aster-island>` markers.
 - Same-origin client navigation for server-rendered pages.
 - Server actions for HTML forms through generated `/_aster/action/...` endpoints.
@@ -30,12 +30,12 @@ Send HTML first. Stream when useful. Hydrate only what needs browser state.
 ```text
 packages/
   aster-core/      Request pipeline, HTML helpers, router, pages, islands, actions.
-  aster-compiler/  File-route discovery, JSX lowering, module/intent graphing, hashed assets, server output.
+  aster-compiler/  File-route discovery, JSX/TS lowering, module/intent graphing, hashed assets, server output.
   aster-dev/       Dependency-free development server and live reload.
   aster-node/      Node adapter for preview and production serving.
   aster-cli/       CLI commands for dev, routes, build, preview, and start.
 
-examples/blog/     Example SSR app using routes, layouts, JSX, streaming, actions, and islands.
+examples/blog/     Example SSR app using routes, layouts, JSX/TSX, streaming, actions, and islands.
 tests/             Node test suite for core, compiler, dev, and Node adapter behavior.
 ```
 
@@ -43,6 +43,7 @@ tests/             Node test suite for core, compiler, dev, and Node adapter beh
 
 ```bash
 npm test
+npm run typecheck
 npm run dev:example
 ```
 
@@ -55,9 +56,12 @@ npm run routes:example
 npm run build:example
 npm run preview:example
 npm run start:example
+npm run typecheck
 ```
 
 `preview` can serve source or built output. `start` requires a completed production build.
+
+See [ROADMAP.md](./ROADMAP.md) for the version plan and current production-readiness backlog.
 
 ## CLI
 
@@ -81,13 +85,14 @@ start    Starts the Node adapter in production mode and requires build output.
 
 ## Route Model
 
-Routes live in `app/routes` and use `.page.js`, `.page.mjs`, `.route.js`, `.route.mjs`, `.page.jsx`, or `.route.jsx`.
+Routes live in `app/routes` and use `.page.js`, `.page.mjs`, `.page.jsx`, `.page.ts`, `.page.tsx`, `.route.js`, `.route.mjs`, `.route.jsx`, `.route.ts`, or `.route.tsx`.
 
 ```text
 app/routes/index.page.js             -> /
 app/routes/blog/[slug].page.js       -> /blog/:slug
 app/routes/docs/[...rest].page.js    -> /docs/*rest
 app/routes/(admin)/dashboard.page.js -> /dashboard
+app/routes/typed.page.tsx            -> /typed
 ```
 
 Route modules export HTTP method handlers:
@@ -106,7 +111,7 @@ If no explicit method export exists, Aster uses the module default export as a `
 
 ## Layouts
 
-Layouts wrap matched pages from the leaf route back to the root layout. Layout files can be `layout.js`, `layout.mjs`, or `layout.jsx`.
+Layouts wrap matched pages from the leaf route back to the root layout. Layout files can be `layout.js`, `layout.mjs`, `layout.jsx`, `layout.ts`, or `layout.tsx`.
 
 ```text
 app/layout.js
@@ -274,11 +279,34 @@ export function GET({ data }) {
 }
 ```
 
-If a matching `loading.js`, `loading.mjs`, or `loading.jsx` exists, Aster uses it as the deferred fallback.
+If a matching `loading.js`, `loading.mjs`, `loading.jsx`, `loading.ts`, or `loading.tsx` exists, Aster uses it as the deferred fallback.
 
-## JSX
+## JSX And TypeScript
 
-Aster compiles `.jsx` route, layout, error, and loading files into runtime calls before importing them.
+Aster compiles `.jsx`, `.ts`, and `.tsx` route, layout, error, loading, and server module files into JavaScript before importing or emitting them. Browser island modules can use `.js`, `.mjs`, or `.ts`. The built-in TypeScript pass strips common type syntax; it does not run a full type checker.
+
+Route modules can use exported authoring types from `@aster/core`:
+
+```ts
+import { html, page } from "@aster/core";
+import type { Loader, MetaHandler, RouteHandler } from "@aster/core";
+
+type Params = { slug: string };
+type Data = { post: { title: string; excerpt: string } };
+
+export const load: Loader<Params, Data> = async ({ params }) => ({
+  post: await db.posts.find(params.slug)
+});
+
+export const meta: MetaHandler<Params, Data> = ({ data }) => ({
+  title: data.post.title,
+  description: data.post.excerpt
+});
+
+export const GET: RouteHandler<Params, Data> = ({ data }) => {
+  return page(html`<article>${data.post.title}</article>`);
+};
+```
 
 ```jsx
 import { page } from "@aster/core";
@@ -322,7 +350,7 @@ window.aster.navigate("/contact");
 
 ## Error Boundaries
 
-Add `error.js`, `error.mjs`, or `error.jsx` beside a layout or route segment. When a route loader, handler, metadata function, or layout throws, Aster renders the nearest boundary.
+Add `error.js`, `error.mjs`, `error.jsx`, `error.ts`, or `error.tsx` beside a layout or route segment. When a route loader, handler, metadata function, or layout throws, Aster renders the nearest boundary.
 
 ```jsx
 import { page } from "@aster/core";
@@ -370,7 +398,7 @@ Build output includes:
 - Rewritten island imports that point at hashed production asset URLs.
 - Light CSS and browser JavaScript minification for production asset output.
 - A server output folder containing traced server modules instead of the entire source tree.
-- Compiled `.jsx` server files.
+- Compiled `.jsx`, `.ts`, and `.tsx` server files.
 - A copied Aster core runtime used by the built server output.
 
 Production serving:
@@ -408,6 +436,7 @@ Server actions also use:
 /deferred                 Deferred loader data with loading boundary
 /contact                  Server action form
 /stream                   Streaming SSR page
+/typescript               TypeScript/TSX route compilation
 /blog/broken              Error boundary recovery
 ```
 
@@ -417,7 +446,8 @@ Aster is still a prototype. It now has a serious framework shape, but it is not 
 
 Current limitations:
 
-- No TypeScript route/module compilation yet. Route discovery covers `.js`, `.mjs`, and `.jsx`; module graph resolution covers `.js`, `.mjs`, `.jsx`, and `.json`.
+- TypeScript support is a lightweight transform, not a type checker. It handles common `.ts` and `.tsx` route/module syntax, but advanced TypeScript emit features are not implemented yet.
+- Browser islands can use `.ts`, but JSX/TSX island authoring needs a browser JSX runtime asset before it can be supported safely.
 - External npm packages and imports outside the app root are recorded as externals, not bundled. Runtime dependencies must still be available in the deployment environment.
 - Browser asset minification is intentionally conservative. It removes comments and normalizes whitespace, but it is not a full JavaScript optimizer.
 - The Intent Graph currently enforces declared server actions and per-route action body limits; other capabilities are recorded but not enforced yet.
@@ -426,7 +456,7 @@ Current limitations:
 
 Near-term roadmap:
 
-- TypeScript route and module compilation.
+- Type checking and richer TypeScript emit support.
 - Expanded Intent Graph enforcement for cache, navigation, islands, and route security policy.
 - External dependency bundling for standalone deploy output.
 - Full JavaScript optimization and production source maps.

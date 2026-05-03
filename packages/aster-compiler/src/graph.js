@@ -8,8 +8,8 @@ import {
   discoverRouteFiles
 } from "./manifest.js";
 
-const MODULE_EXTENSIONS = [".js", ".mjs", ".jsx", ".json"];
-const CLIENT_ENTRY_EXTENSIONS = new Set([".js", ".mjs"]);
+const MODULE_EXTENSIONS = [".js", ".mjs", ".jsx", ".ts", ".tsx", ".json"];
+const CLIENT_ENTRY_EXTENSIONS = new Set([".js", ".mjs", ".ts"]);
 
 async function fileExists(filePath) {
   const info = await stat(filePath).catch(() => null);

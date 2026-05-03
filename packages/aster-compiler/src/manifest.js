@@ -2,12 +2,26 @@ import { readdir, stat } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { bindAction, isAction } from "../../aster-core/src/action.js";
-import { compileJsxModule } from "./jsx-transform.js";
+import { compileSourceModule, isCompilableSourceFile } from "./jsx-transform.js";
 
-const ROUTE_SUFFIXES = [".page.jsx", ".route.jsx", ".page.js", ".page.mjs", ".route.js", ".route.mjs"];
-const LAYOUT_FILES = new Set(["layout.jsx", "layout.js", "layout.mjs"]);
-const ERROR_FILES = new Set(["error.jsx", "error.js", "error.mjs"]);
-const LOADING_FILES = new Set(["loading.jsx", "loading.js", "loading.mjs"]);
+const ROUTE_SUFFIXES = [
+  ".page.tsx",
+  ".route.tsx",
+  ".page.jsx",
+  ".route.jsx",
+  ".page.ts",
+  ".route.ts",
+  ".page.js",
+  ".page.mjs",
+  ".route.js",
+  ".route.mjs"
+];
+const LAYOUT_FILE_NAMES = ["layout.tsx", "layout.jsx", "layout.ts", "layout.js", "layout.mjs"];
+const ERROR_FILE_NAMES = ["error.tsx", "error.jsx", "error.ts", "error.js", "error.mjs"];
+const LOADING_FILE_NAMES = ["loading.tsx", "loading.jsx", "loading.ts", "loading.js", "loading.mjs"];
+const LAYOUT_FILES = new Set(LAYOUT_FILE_NAMES);
+const ERROR_FILES = new Set(ERROR_FILE_NAMES);
+const LOADING_FILES = new Set(LOADING_FILE_NAMES);
 const HTTP_METHODS = ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"];
 
 function routeSuffix(filePath) {
@@ -26,13 +40,9 @@ function isLoadingFile(filePath) {
   return LOADING_FILES.has(path.basename(filePath));
 }
 
-function isJsxFile(filePath) {
-  return filePath.endsWith(".jsx");
-}
-
 async function moduleUrlFor(filePath, options) {
-  if (isJsxFile(filePath)) {
-    const compiled = await compileJsxModule(filePath, {
+  if (isCompilableSourceFile(filePath)) {
+    const compiled = await compileSourceModule(filePath, {
       root: options.root
     });
 
@@ -112,7 +122,7 @@ export async function discoverLayoutFiles(appDirectory, routesDirectory) {
   const files = [];
 
   if (appInfo?.isDirectory()) {
-    for (const fileName of ["layout.jsx", "layout.js", "layout.mjs"]) {
+    for (const fileName of LAYOUT_FILE_NAMES) {
       const rootLayout = path.join(appDirectory, fileName);
       const rootLayoutInfo = await stat(rootLayout).catch(() => null);
 
@@ -167,11 +177,11 @@ export function boundaryChainForRoute(filePath, appDirectory, routesDirectory, b
 }
 
 export async function discoverErrorFiles(appDirectory, routesDirectory) {
-  return discoverScopedFiles(appDirectory, routesDirectory, ["error.jsx", "error.js", "error.mjs"], isErrorFile);
+  return discoverScopedFiles(appDirectory, routesDirectory, ERROR_FILE_NAMES, isErrorFile);
 }
 
 export async function discoverLoadingFiles(appDirectory, routesDirectory) {
-  return discoverScopedFiles(appDirectory, routesDirectory, ["loading.jsx", "loading.js", "loading.mjs"], isLoadingFile);
+  return discoverScopedFiles(appDirectory, routesDirectory, LOADING_FILE_NAMES, isLoadingFile);
 }
 
 function ancestorDirectories(fromDirectory, toDirectory) {
@@ -346,7 +356,7 @@ export function printRouteManifest(manifest) {
     const methodLabel = route.actions?.length > 0 ? `${methods}+ACTIONS` : methods;
     const layouts =
       route.layouts?.length > 0
-        ? route.layouts.map((layout) => layout.id.replace(/\/layout\.m?js$/, "") || "app").join(" -> ")
+        ? route.layouts.map((layout) => layout.id.replace(/\/layout\.(?:mjs|js|jsx|ts|tsx)$/, "") || "app").join(" -> ")
         : "-";
     return `${methodLabel.padEnd(18)} ${route.pattern.padEnd(24)} ${route.id.padEnd(40)} ${layouts}`;
   });

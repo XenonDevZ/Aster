@@ -167,6 +167,15 @@ export function boundaryChainForRoute(
   boundaryByDirectory: Map<string, BoundaryManifestEntry>
 ): BoundaryManifestEntry[];
 export function transformJsx(source: string, options?: { injectImport?: boolean }): { code: string; transformed: boolean };
+export function transformTypeScript(source: string): string;
+export function transformSourceModule(source: string, options?: { filePath?: string }): { code: string; transformed: boolean };
+export function isCompilableSourceFile(filePath: string): boolean;
+export function compileSourceModule(filePath: string, options?: { root?: string; outputRoot?: string }): Promise<{
+  sourcePath: string;
+  outputPath: string;
+  outputUrl: string;
+  transformed: boolean;
+}>;
 export function compileJsxModule(filePath: string, options?: { root?: string; outputRoot?: string }): Promise<{
   sourcePath: string;
   outputPath: string;

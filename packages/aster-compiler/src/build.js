@@ -3,14 +3,24 @@ import { mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises"
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createModuleGraph, resolveModuleSpecifier } from "./graph.js";
-import { transformJsx } from "./jsx-transform.js";
+import { isCompilableSourceFile, transformSourceModule } from "./jsx-transform.js";
 
 const DEFAULT_OUTPUT_DIRECTORY = ".aster/output";
 const DEFAULT_ASSETS_BASE = "/_aster/assets/";
-const APP_ASSET_EXTENSIONS = new Set([".css", ".js", ".json", ".mjs", ".png", ".svg", ".txt", ".webp"]);
+const APP_ASSET_EXTENSIONS = new Set([
+  ".css",
+  ".js",
+  ".json",
+  ".mjs",
+  ".ts",
+  ".png",
+  ".svg",
+  ".txt",
+  ".webp"
+]);
 const JAVASCRIPT_ASSET_EXTENSIONS = new Set([".js", ".mjs"]);
-const REWRITABLE_CLIENT_EXTENSIONS = new Set([".js", ".mjs"]);
-const SERVER_FILE_EXTENSIONS = new Set([".js", ".mjs", ".jsx", ".json"]);
+const REWRITABLE_CLIENT_EXTENSIONS = new Set([".js", ".mjs", ".ts"]);
+const SERVER_FILE_EXTENSIONS = new Set([".js", ".mjs", ".jsx", ".ts", ".tsx", ".json"]);
 const REGEX_PREFIX_CHARACTERS = new Set([
   "(",
   "{",
@@ -113,12 +123,16 @@ function hashedFileName(relativePath, hash) {
   return directory === "." ? fileName : slashPath(path.join(directory, fileName));
 }
 
+function sourceOutputRelativePath(relativePath) {
+  return relativePath.replace(/\.(?:jsx|ts|tsx)$/, ".js");
+}
+
 function assetOutputFile(asset, hash) {
-  return slashPath(path.join("assets", asset.type, hashedFileName(asset.relativePath, hash)));
+  return slashPath(path.join("assets", asset.type, hashedFileName(asset.outputRelativePath ?? asset.relativePath, hash)));
 }
 
 function assetOutputUrl(asset, hash, assetsBase) {
-  return `${assetsBase}${slashPath(path.join(asset.type, hashedFileName(asset.relativePath, hash)))}`;
+  return `${assetsBase}${slashPath(path.join(asset.type, hashedFileName(asset.outputRelativePath ?? asset.relativePath, hash)))}`;
 }
 
 function minifyCss(buffer) {
@@ -291,22 +305,28 @@ function minifyJs(buffer) {
   return Buffer.from(output.trim());
 }
 
-function prepareAssetBytes(filePath, buffer, options) {
-  if (options.minify === false) {
-    return buffer;
+function prepareAssetBytes(asset, buffer, options) {
+  let bytes = buffer;
+
+  if (asset.type === "app" && isCompilableSourceFile(asset.filePath)) {
+    bytes = Buffer.from(transformSourceModule(buffer.toString("utf8"), { filePath: asset.filePath }).code);
   }
 
-  const extension = path.extname(filePath);
+  if (options.minify === false) {
+    return bytes;
+  }
+
+  const extension = path.extname(asset.outputRelativePath ?? asset.relativePath);
 
   if (extension === ".css") {
-    return minifyCss(buffer);
+    return minifyCss(bytes);
   }
 
   if (JAVASCRIPT_ASSET_EXTENSIONS.has(extension)) {
-    return minifyJs(buffer);
+    return minifyJs(bytes);
   }
 
-  return buffer;
+  return bytes;
 }
 
 async function collectPublicAssets(root) {
@@ -351,6 +371,7 @@ async function collectAppAssets(root, graph) {
       type: "app",
       filePath,
       relativePath,
+      outputRelativePath: sourceOutputRelativePath(relativePath),
       source: slashPath(path.relative(root, filePath)),
       originalUrl: `/_aster/app/${relativePath}`
     };
@@ -392,7 +413,7 @@ async function finalizeAssetRecords(records, assetsBase, options) {
     let changed = false;
 
     for (const record of records) {
-      let bytes = prepareAssetBytes(record.filePath, record.sourceBytes, options);
+      let bytes = prepareAssetBytes(record, record.sourceBytes, options);
 
       if (record.type === "app" && REWRITABLE_CLIENT_EXTENSIONS.has(path.extname(record.filePath))) {
         const code = await rewriteClientModuleImports(bytes.toString("utf8"), record, recordsByFilePath, hashByUrl, assetsBase);
@@ -501,7 +522,7 @@ export function rewriteAssetUrls(markup, manifest) {
 }
 
 function serverAppRelativePath(relativePath) {
-  return relativePath.replace(/\.jsx$/, ".js");
+  return sourceOutputRelativePath(relativePath);
 }
 
 function serverAppOutputPath(root, serverRoot, sourceFile) {
@@ -612,7 +633,7 @@ export async function buildServerOutput(options = {}) {
   for (const filePath of files) {
     const outputPath = serverAppOutputPath(root, serverRoot, filePath);
     const source = await readFile(filePath, "utf8");
-    const transformed = filePath.endsWith(".jsx") ? transformJsx(source).code : source;
+    const transformed = isCompilableSourceFile(filePath) ? transformSourceModule(source, { filePath }).code : source;
     const code = await rewriteServerImports(transformed, filePath, outputPath, root, serverRoot);
 
     await mkdir(path.dirname(outputPath), { recursive: true });

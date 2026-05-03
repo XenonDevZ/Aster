@@ -16,4 +16,11 @@ export {
   printRouteManifest,
   routePatternFromFile
 } from "./manifest.js";
-export { compileJsxModule, transformJsx } from "./jsx-transform.js";
+export {
+  compileJsxModule,
+  compileSourceModule,
+  isCompilableSourceFile,
+  transformJsx,
+  transformSourceModule,
+  transformTypeScript
+} from "./jsx-transform.js";

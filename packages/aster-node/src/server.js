@@ -36,7 +36,7 @@ function headersFromNode(request) {
   return headers;
 }
 
-function toFetchRequest(request, port) {
+export function toFetchRequest(request, port) {
   const host = request.headers.host ?? `localhost:${port}`;
   const url = new URL(request.url ?? "/", `http://${host}`);
   const method = request.method ?? "GET";
@@ -50,7 +50,7 @@ function toFetchRequest(request, port) {
   });
 }
 
-async function sendFetchResponse(nodeResponse, fetchResponse) {
+export async function sendFetchResponse(nodeResponse, fetchResponse) {
   nodeResponse.statusCode = fetchResponse.status;
   nodeResponse.statusMessage = fetchResponse.statusText;
 

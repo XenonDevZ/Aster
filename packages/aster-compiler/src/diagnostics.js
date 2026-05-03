@@ -1,6 +1,5 @@
 const FATAL_CODES = new Set([
   "client-imports-server-module",
-  "server-imports-island-module",
   "undeclared-route-action",
   "unknown-intent-action"
 ]);

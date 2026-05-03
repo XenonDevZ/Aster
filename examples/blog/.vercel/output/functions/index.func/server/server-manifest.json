@@ -1,0 +1,155 @@
+{
+  "version": 1,
+  "generatedAt": "2026-05-03T17:00:26.243Z",
+  "outputDirectory": ".aster/output",
+  "serverRoot": "server",
+  "appDirectory": "server/app",
+  "files": [
+    {
+      "source": "app/components/counter.js",
+      "file": "server/app/components/counter.js"
+    },
+    {
+      "source": "app/layout.js",
+      "file": "server/app/layout.js"
+    },
+    {
+      "source": "app/routes/blog/[slug].page.js",
+      "file": "server/app/routes/blog/[slug].page.js"
+    },
+    {
+      "source": "app/routes/blog/error.jsx",
+      "file": "server/app/routes/blog/error.js"
+    },
+    {
+      "source": "app/routes/blog/layout.js",
+      "file": "server/app/routes/blog/layout.js"
+    },
+    {
+      "source": "app/routes/contact.page.js",
+      "file": "server/app/routes/contact.page.js"
+    },
+    {
+      "source": "app/routes/deferred/index.page.js",
+      "file": "server/app/routes/deferred/index.page.js"
+    },
+    {
+      "source": "app/routes/deferred/loading.jsx",
+      "file": "server/app/routes/deferred/loading.js"
+    },
+    {
+      "source": "app/routes/index.page.js",
+      "file": "server/app/routes/index.page.js"
+    },
+    {
+      "source": "app/routes/jsx.page.jsx",
+      "file": "server/app/routes/jsx.page.js"
+    },
+    {
+      "source": "app/routes/stream.page.js",
+      "file": "server/app/routes/stream.page.js"
+    },
+    {
+      "source": "app/routes/typescript.page.tsx",
+      "file": "server/app/routes/typescript.page.js"
+    }
+  ],
+  "graph": {
+    "entries": [
+      "app/layout.js",
+      "app/routes/blog/[slug].page.js",
+      "app/routes/blog/error.jsx",
+      "app/routes/blog/layout.js",
+      "app/routes/contact.page.js",
+      "app/routes/deferred/index.page.js",
+      "app/routes/deferred/loading.jsx",
+      "app/routes/index.page.js",
+      "app/routes/jsx.page.jsx",
+      "app/routes/stream.page.js",
+      "app/routes/typescript.page.tsx"
+    ],
+    "modules": [
+      "app/components/counter.js",
+      "app/layout.js",
+      "app/routes/blog/[slug].page.js",
+      "app/routes/blog/error.jsx",
+      "app/routes/blog/layout.js",
+      "app/routes/contact.page.js",
+      "app/routes/deferred/index.page.js",
+      "app/routes/deferred/loading.jsx",
+      "app/routes/index.page.js",
+      "app/routes/jsx.page.jsx",
+      "app/routes/stream.page.js",
+      "app/routes/typescript.page.tsx"
+    ],
+    "externals": [
+      {
+        "specifier": "../../../packages/aster-core/src/index.js",
+        "importedBy": "app/layout.js"
+      },
+      {
+        "specifier": "../../../../../packages/aster-core/src/index.js",
+        "importedBy": "app/routes/blog/[slug].page.js"
+      },
+      {
+        "specifier": "../../../../../packages/aster-core/src/index.js",
+        "importedBy": "app/routes/blog/error.jsx"
+      },
+      {
+        "specifier": "../../../../../packages/aster-core/src/index.js",
+        "importedBy": "app/routes/blog/layout.js"
+      },
+      {
+        "specifier": "../../../../packages/aster-core/src/index.js",
+        "importedBy": "app/routes/contact.page.js"
+      },
+      {
+        "specifier": "../../../../../packages/aster-core/src/index.js",
+        "importedBy": "app/routes/deferred/index.page.js"
+      },
+      {
+        "specifier": "../../../../packages/aster-core/src/index.js",
+        "importedBy": "app/routes/index.page.js"
+      },
+      {
+        "specifier": "../../../../packages/aster-core/src/index.js",
+        "importedBy": "app/routes/jsx.page.jsx"
+      },
+      {
+        "specifier": "../../../../packages/aster-core/src/index.js",
+        "importedBy": "app/routes/stream.page.js"
+      },
+      {
+        "specifier": "../../../../packages/aster-core/src/index.js",
+        "importedBy": "app/routes/typescript.page.tsx"
+      }
+    ],
+    "diagnostics": [
+      {
+        "level": "warning",
+        "code": "server-imports-island-module",
+        "message": "Server module app/routes/index.page.js imports browser island module app/components/counter.js.",
+        "importer": "app/routes/index.page.js",
+        "imported": "app/components/counter.js"
+      }
+    ]
+  },
+  "runtime": {
+    "@aster/core": "server/packages/aster-core/src/index.js",
+    "files": [
+      "packages/aster-core/src/action.js",
+      "packages/aster-core/src/app.js",
+      "packages/aster-core/src/deferred.js",
+      "packages/aster-core/src/html.js",
+      "packages/aster-core/src/index.d.ts",
+      "packages/aster-core/src/index.js",
+      "packages/aster-core/src/island.js",
+      "packages/aster-core/src/jsx.js",
+      "packages/aster-core/src/meta.js",
+      "packages/aster-core/src/navigation.js",
+      "packages/aster-core/src/page.js",
+      "packages/aster-core/src/response.js",
+      "packages/aster-core/src/router.js"
+    ]
+  }
+}

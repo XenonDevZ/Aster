@@ -1,4 +1,4 @@
-import { escapeAttribute, html, isHtml, raw } from "./html.js";
+import { escapeAttribute, html, isHtml, raw } from "file:///Users/mac/Documents/New%20project/examples/blog/packages/aster-core/src/html.js.mjs";
 
 export function island(component, props = {}, fallback = "") {
   const options =

@@ -1,4 +1,4 @@
-import { html, island, join, page } from "../../../../packages/aster-core/src/index.js";
+import { html, island, join, page } from "../../packages/aster-core/src/index.js";
 
 import Counter from "../components/counter.js";
 

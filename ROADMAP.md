@@ -48,9 +48,9 @@ This roadmap tracks the work needed to move Aster from a capable local prototype
 
 ### Remove The Manual Path String
 
-- 🔵 Replace `island("/_aster/app/components/counter.js", props, fallback)` with `island(Counter, props, fallback)`.
-- ⬜ Let the compiler resolve the module path from the component reference.
-- ⬜ Remove the need for developers to know or type internal `/_aster/` paths.
+- ✅ Replace `island("/_aster/app/components/counter.js", props, fallback)` with `island(Counter, props, fallback)`.
+- ✅ Let the compiler resolve the module path from the component reference.
+- ✅ Remove the need for developers to know or type internal `/_aster/` paths.
 
 ### Props Safety
 
@@ -99,7 +99,7 @@ export const guard = requireAuth;
 | Adapter | Status | Notes |
 | :--- | :---: | :--- |
 | Node.js | ✅ | Exists through `aster preview` and `aster start`. |
-| Vercel | 🔵 | Highest-impact adapter for early users. |
+| Vercel | ✅ | Highest-impact adapter for early users. |
 | Cloudflare Workers | ⬜ | Needed for edge deployments. |
 | Deno Deploy | ⬜ | Fits Aster's fetch-native design. |
 

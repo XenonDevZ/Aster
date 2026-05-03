@@ -4,7 +4,7 @@ import { pathToFileURL } from "node:url";
 
 const JSX_RUNTIME_URL = new URL("../../aster-core/src/index.js", import.meta.url).href;
 const MODULE_EXTENSIONS = [".js", ".mjs", ".jsx", ".ts", ".tsx", ".json"];
-const COMPILABLE_SOURCE_EXTENSIONS = new Set([".jsx", ".ts", ".tsx"]);
+const COMPILABLE_SOURCE_EXTENSIONS = new Set([".jsx", ".ts", ".tsx", ".js", ".mjs"]);
 const JSX_SOURCE_EXTENSIONS = new Set([".jsx", ".tsx"]);
 const TAG_NAME = /[A-Za-z0-9_$:.-]/;
 const ATTRIBUTE_NAME = /[A-Za-z0-9_:$.-]/;
@@ -556,6 +556,36 @@ export function transformSourceModule(source, options = {}) {
     transformed ||= result.transformed;
   }
 
+  if (options.filePath && options.root) {
+    const appDirectory = path.join(options.root, "app");
+    const relativePath = path.relative(appDirectory, options.filePath).split(path.sep).join("/");
+    
+    if (!relativePath.startsWith("../") && !path.isAbsolute(relativePath) && relativePath.startsWith("components/")) {
+      const originalUrl = `/_aster/app/${relativePath.replace(/\.(?:jsx|ts|tsx)$/, ".js")}`;
+      let injected = false;
+      
+      const namedPattern = /export\s+(?:const|let|var|function|class)\s+([A-Za-z_$][\w$]*)/g;
+      for (const match of code.matchAll(namedPattern)) {
+        code += `\nif (typeof ${match[1]} !== "undefined") { ${match[1]}.__asterSource = ${JSON.stringify(originalUrl)}; ${match[1]}.__asterExport = ${JSON.stringify(match[1])}; }`;
+        injected = true;
+      }
+      
+      const defaultPattern = /export\s+default\s+(?:function\s+([A-Za-z_$][\w$]*)|class\s+([A-Za-z_$][\w$]*)|([A-Za-z_$][\w$]*))/;
+      const defaultMatch = code.match(defaultPattern);
+      if (defaultMatch) {
+        const name = defaultMatch[1] || defaultMatch[2] || defaultMatch[3];
+        if (name && /^[A-Za-z_$][\w$]*$/.test(name) && name !== "function" && name !== "class") {
+          code += `\nif (typeof ${name} !== "undefined") { ${name}.__asterSource = ${JSON.stringify(originalUrl)}; ${name}.__asterExport = "default"; }`;
+          injected = true;
+        }
+      }
+      
+      if (injected) {
+        transformed = true;
+      }
+    }
+  }
+
   return {
     code,
     transformed
@@ -663,7 +693,7 @@ export async function compileSourceModule(filePath, options = {}) {
   cache.set(sourcePath, pending);
 
   const source = await readFile(filePath, "utf8");
-  const transformed = transformSourceModule(source, { filePath });
+  const transformed = transformSourceModule(source, { filePath, root });
   const code = await rewriteCompiledImports(transformed.code, sourcePath, {
     ...options,
     root,

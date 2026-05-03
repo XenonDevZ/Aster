@@ -1,0 +1,11 @@
+{
+  "name": "@aster/adapter-vercel",
+  "version": "0.1.0",
+  "description": "Vercel Build Output API adapter for the Aster framework.",
+  "type": "module",
+  "main": "src/index.js",
+  "dependencies": {
+    "@aster/core": "workspace:*",
+    "@aster/node": "workspace:*"
+  }
+}

@@ -309,7 +309,7 @@ function prepareAssetBytes(asset, buffer, options) {
   let bytes = buffer;
 
   if (asset.type === "app" && isCompilableSourceFile(asset.filePath)) {
-    bytes = Buffer.from(transformSourceModule(buffer.toString("utf8"), { filePath: asset.filePath }).code);
+    bytes = Buffer.from(transformSourceModule(buffer.toString("utf8"), { filePath: asset.filePath, root: options.root }).code);
   }
 
   if (options.minify === false) {
@@ -469,7 +469,7 @@ export async function buildProductionAssets(options = {}) {
       sourceBytes: await readFile(asset.filePath)
     }))
   );
-  const hashByUrl = await finalizeAssetRecords(records, assetsBase, options);
+  const hashByUrl = await finalizeAssetRecords(records, assetsBase, { ...options, root });
 
   for (const asset of records) {
     const hash = hashByUrl.get(asset.originalUrl);
@@ -633,7 +633,7 @@ export async function buildServerOutput(options = {}) {
   for (const filePath of files) {
     const outputPath = serverAppOutputPath(root, serverRoot, filePath);
     const source = await readFile(filePath, "utf8");
-    const transformed = isCompilableSourceFile(filePath) ? transformSourceModule(source, { filePath }).code : source;
+    const transformed = isCompilableSourceFile(filePath) ? transformSourceModule(source, { filePath, root }).code : source;
     const code = await rewriteServerImports(transformed, filePath, outputPath, root, serverRoot);
 
     await mkdir(path.dirname(outputPath), { recursive: true });
